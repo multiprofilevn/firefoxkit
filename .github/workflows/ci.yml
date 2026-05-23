@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  unit:
+    name: unit (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test -count=1 -timeout 60s ./...
+
+  integration:
+    name: integration (${{ matrix.os }}, ff-${{ matrix.firefox }})
+    needs: unit
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            firefox: "latest"
+          - os: windows-latest
+            firefox: "latest"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install Firefox (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y firefox xvfb
+          echo "FIREFOXKIT_FIREFOX_PATH=$(which firefox)" >> $GITHUB_ENV
+
+      - name: Install Firefox (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install firefox -y --no-progress
+          $ffPath = "C:\Program Files\Mozilla Firefox\firefox.exe"
+          if (Test-Path $ffPath) {
+            "FIREFOXKIT_FIREFOX_PATH=$ffPath" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          } else {
+            throw "Firefox not found at expected path"
+          }
+
+      - name: Integration tests (Linux, Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a go test -count=1 -timeout 5m -tags=integration ./...
+
+      - name: Integration tests (Windows)
+        if: runner.os == 'Windows'
+        run: go test -count=1 -timeout 5m -tags=integration ./...
