@@ -28,6 +28,56 @@ type Page struct {
 
 	dlOnce sync.Once
 	dl     *downloadsAPI
+
+	// subsMu guards subs — the cumulative list of BiDi event subscriptions
+	// registered for this page (header injector, downloads, OnDialog,
+	// OnConsole). cleanup() walks the list on Browser.ClosePage so we don't
+	// leak handlers + server-side intercept ids after the tab is gone.
+	subsMu sync.Mutex
+	subs   []*bidi.Subscription
+}
+
+// trackSub appends a subscription to the per-page list so cleanup() can
+// unsubscribe it. Returns the input unchanged for caller chaining.
+func (p *Page) trackSub(s *bidi.Subscription) *bidi.Subscription {
+	if s == nil {
+		return nil
+	}
+	p.subsMu.Lock()
+	p.subs = append(p.subs, s)
+	p.subsMu.Unlock()
+	return s
+}
+
+// cleanup unsubscribes every per-page BiDi event handler and releases any
+// server-side intercept ids. Idempotent. Called from Browser.ClosePage and
+// Browser.Close. Failures during cleanup are logged but never returned —
+// teardown must be best-effort to avoid wedging on partial state.
+func (p *Page) cleanup(ctx context.Context) {
+	// Header injector + intercept id.
+	if p.hdr != nil {
+		if err := p.removeHeaderInterceptor(ctx); err != nil && p.log != nil {
+			p.log.Warnf("firefoxkit: cleanup header injector: %v", err)
+		}
+	}
+	// Downloads subscription.
+	if p.dl != nil {
+		p.dl.mu.Lock()
+		sub := p.dl.sub
+		p.dl.sub = nil
+		p.dl.mu.Unlock()
+		if sub != nil {
+			sub.Unsubscribe()
+		}
+	}
+	// Tracked listener subscriptions (OnDialog / OnConsole).
+	p.subsMu.Lock()
+	subs := p.subs
+	p.subs = nil
+	p.subsMu.Unlock()
+	for _, s := range subs {
+		s.Unsubscribe()
+	}
 }
 
 // ID returns the BiDi browsingContext id — opaque string, surfaced for

@@ -19,3 +19,5 @@ AGENTS.md
 plans/
 .claude
 CLAUDE.md
+# local smoke-test artifacts produced by examples/basic
+smoke-*.png

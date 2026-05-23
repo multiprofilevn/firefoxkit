@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
-	"time"
 
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
@@ -57,10 +56,9 @@ func (f *Frame) Evaluate(ctx context.Context, expr string, out any) error {
 }
 
 // Navigate drives the frame to url, waiting for `complete` readiness.
-func (f *Frame) Navigate(ctx context.Context, url string, timeout time.Duration) error {
-	cctx, cancel := navCtx(timeout)
-	defer cancel()
-	_, err := f.page.browser.client.Navigate(cctx, bidi.NavigateParams{
+// Caller controls the deadline via ctx.
+func (f *Frame) Navigate(ctx context.Context, url string) error {
+	_, err := f.page.browser.client.Navigate(ctx, bidi.NavigateParams{
 		Context: f.contextID,
 		URL:     url,
 		Wait:    bidi.WaitComplete,

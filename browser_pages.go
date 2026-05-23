@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
@@ -31,13 +30,12 @@ func (b *Browser) populateInitialPage(ctx context.Context) error {
 	return nil
 }
 
-// NewPage opens a new tab and makes it current.
-func (b *Browser) NewPage() (*Page, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+// NewPage opens a new tab and makes it current. Honors ctx for the
+// browsingContext.create RPC.
+func (b *Browser) NewPage(ctx context.Context) (*Page, error) {
 	res, err := b.client.Create(ctx, bidi.CreateParams{Type: "tab"})
 	if err != nil {
-		return nil, fmt.Errorf("%w: browsingContext.create: %v", ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: browsingContext.create: %v", ErrBiDiSessionFailed, err)
 	}
 	p := &Page{browser: b, contextID: res.Context, log: b.log}
 	b.pagesMu.Lock()
@@ -48,8 +46,9 @@ func (b *Browser) NewPage() (*Page, error) {
 }
 
 // ClosePage closes the page with the given id. Returns ErrCannotCloseLastPage
-// if it's the only page (use Browser.Close to shut down instead).
-func (b *Browser) ClosePage(id string) error {
+// if it's the only page (use Browser.Close to shut down instead). Honors ctx
+// for both the per-page cleanup and the CloseContext RPC.
+func (b *Browser) ClosePage(ctx context.Context, id string) error {
 	b.pagesMu.Lock()
 	if len(b.pages) <= 1 {
 		b.pagesMu.Unlock()
@@ -73,48 +72,51 @@ func (b *Browser) ClosePage(id string) error {
 	}
 	b.pagesMu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	target.cleanup(ctx)
 	return b.client.CloseContext(ctx, bidi.CloseParams{Context: id})
 }
 
-// SwitchPageByIndex makes pages[i] current. Errors if out of range.
-func (b *Browser) SwitchPageByIndex(i int) error {
+// SwitchPageByIndex makes pages[i] current. Errors if out of range. Honors
+// ctx for the activate RPC.
+func (b *Browser) SwitchPageByIndex(ctx context.Context, i int) error {
 	b.pagesMu.Lock()
-	defer b.pagesMu.Unlock()
 	if i < 0 || i >= len(b.pages) {
+		b.pagesMu.Unlock()
 		return ErrPageNotFound
 	}
 	b.current = b.pages[i]
-	return b.activateLocked(b.current.contextID)
+	target := b.current.contextID
+	b.pagesMu.Unlock()
+	return b.activate(ctx, target)
 }
 
 // SwitchPageByURL makes the first page whose URL contains needle current.
-func (b *Browser) SwitchPageByURL(needle string) error {
+func (b *Browser) SwitchPageByURL(ctx context.Context, needle string) error {
 	b.pagesMu.Lock()
-	defer b.pagesMu.Unlock()
+	var target string
 	for _, p := range b.pages {
 		if matchPage(p.URL(), needle) {
 			b.current = p
-			return b.activateLocked(p.contextID)
+			target = p.contextID
+			break
 		}
 	}
-	return ErrPageNotFound
+	b.pagesMu.Unlock()
+	if target == "" {
+		return ErrPageNotFound
+	}
+	return b.activate(ctx, target)
 }
 
 // SwitchPageByOrigin is a sugar wrapper for matching scheme://host.
-func (b *Browser) SwitchPageByOrigin(origin string) error {
-	origin = strings.TrimRight(origin, "/")
-	return b.SwitchPageByURL(origin)
+func (b *Browser) SwitchPageByOrigin(ctx context.Context, origin string) error {
+	return b.SwitchPageByURL(ctx, strings.TrimRight(origin, "/"))
 }
 
-// activateLocked sends browsingContext.activate. Caller must hold pagesMu.
-func (b *Browser) activateLocked(id string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+// activate sends browsingContext.activate. Failure logged-not-returned —
+// activation is best-effort and shouldn't fail the switch operation.
+func (b *Browser) activate(ctx context.Context, id string) error {
 	if err := b.client.Activate(ctx, bidi.ActivateParams{Context: id}); err != nil {
-		// activate isn't critical — log and proceed. Mirrors chromekit which
-		// treats focus-failure as a warning, not a fatal.
 		if b.log != nil {
 			b.log.Warnf("firefoxkit: activate %s: %v", id, err)
 		}

@@ -30,9 +30,13 @@ func main() {
 	defer b.Close()
 
 	p := b.Current()
-	if err := p.Navigate(*target, 30*time.Second); err != nil {
+
+	navCtx, navCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := p.Navigate(navCtx, *target); err != nil {
+		navCancel()
 		log.Fatalf("Navigate: %v", err)
 	}
+	navCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

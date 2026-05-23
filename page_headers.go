@@ -86,14 +86,21 @@ func (p *Page) installHeaderInterceptor(ctx context.Context) error {
 		}
 		p.hdr.mu.RUnlock()
 
-		// Use a fresh background ctx — the original event ctx is gone by the
-		// time we dispatch.
-		cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = p.browser.client.ContinueRequest(cctx, bidi.ContinueRequestParams{
-			Request: ev.Request.Request,
-			Headers: hdrs,
-		})
+		// Dispatch ContinueRequest in a goroutine — the BiDi event-bus
+		// dispatcher runs handlers synchronously on the reader goroutine,
+		// so a synchronous RPC here would serialize EVERY subsequent event
+		// (downloads, dialogs, console) behind this one network call.
+		req := ev.Request.Request
+		go func() {
+			cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := p.browser.client.ContinueRequest(cctx, bidi.ContinueRequestParams{
+				Request: req,
+				Headers: hdrs,
+			}); err != nil && p.log != nil {
+				p.log.Debugf("firefoxkit: continueRequest: %v", err)
+			}
+		}()
 	})
 	p.hdr.mu.Lock()
 	p.hdr.interceptID = res.Intercept

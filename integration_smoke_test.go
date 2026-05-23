@@ -38,12 +38,12 @@ func TestIntegration_LaunchNavigateScreenshotClose(t *testing.T) {
 		t.Fatal("Current returned nil")
 	}
 
-	if err := p.Navigate("about:blank", 20*time.Second); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := p.Navigate(ctx, "about:blank"); err != nil {
 		t.Fatalf("Navigate about:blank: %v", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 
 	if err := p.WaitForReady(ctx, 10*time.Second); err != nil {
 		t.Fatalf("WaitForReady: %v", err)
@@ -67,12 +67,12 @@ func TestIntegration_EvaluatePrimitives(t *testing.T) {
 	defer b.Close()
 
 	p := b.Current()
-	if err := p.Navigate("about:blank", 20*time.Second); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := p.Navigate(ctx, "about:blank"); err != nil {
 		t.Fatalf("Navigate: %v", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	var sum float64
 	if err := p.Evaluate(ctx, "1 + 2", &sum); err != nil {
@@ -103,13 +103,13 @@ func TestIntegration_CookieRoundTrip(t *testing.T) {
 	defer b.Close()
 
 	p := b.Current()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// data: URLs don't accept cookies — use a real-ish origin.
-	if err := p.Navigate("https://example.com", 30*time.Second); err != nil {
+	if err := p.Navigate(ctx, "https://example.com"); err != nil {
 		t.Skipf("Navigate example.com failed (likely offline): %v", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	if err := p.Cookies().Set(ctx, firefoxkit.Cookie{
 		Name: "ffk_test", Value: "12345", Domain: "example.com", Path: "/",

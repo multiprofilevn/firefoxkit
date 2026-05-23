@@ -4,6 +4,7 @@ package firefoxkit
 
 import (
 	"fmt"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -23,6 +24,40 @@ var (
 
 const swRestore = 9
 
+// Per-process state for findFirefoxHWND. The callback is allocated EXACTLY
+// ONCE via syscall.NewCallback (Go's callback table is a fixed-size slab
+// that does NOT get garbage-collected — allocating per call exhausts it
+// after ~1024 lookups). Thread the pid/match through package vars under
+// findHwndMu so the single callback closure has nothing to capture.
+var (
+	findHwndOnce sync.Once
+	findHwndCB   uintptr
+	findHwndMu   sync.Mutex
+	findHwndPID  uint32
+	findHwndOut  uintptr
+)
+
+func findHwndCallback(hwnd, _ uintptr) uintptr {
+	var winPID uint32
+	_, _, _ = procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&winPID)))
+	if winPID != findHwndPID {
+		return 1
+	}
+	if ret, _, _ := procIsWindowVisible.Call(hwnd); ret == 0 {
+		return 1
+	}
+	var buf [256]uint16
+	n, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if n == 0 {
+		return 1
+	}
+	if syscall.UTF16ToString(buf[:n]) == input.MozillaWindowClass {
+		findHwndOut = hwnd
+		return 0 // stop enumeration
+	}
+	return 1
+}
+
 // HWND returns the top-level Mozilla window owned by this Browser's process.
 // Connect-path callers must set b.proc via WithModifyCmd or set foreground by
 // PID themselves — when proc is nil this returns 0.
@@ -34,34 +69,22 @@ func (b *Browser) HWND() (uintptr, error) {
 }
 
 // findFirefoxHWND enumerates visible top-level windows, matches by PID +
-// MozillaWindowClass, returns first hit. 0 if not found. Uses a closure to
-// capture pid/matched — avoids the uintptr→pointer round-trip vet warns on.
+// MozillaWindowClass, returns the first hit. 0 if not found.
+//
+// IMPORTANT: callback is allocated once via sync.Once. Calls are serialized
+// through findHwndMu so pid/match state thread through package vars instead
+// of a closure capture (closure capture would force a fresh NewCallback per
+// invocation, exhausting Go's fixed callback table).
 func findFirefoxHWND(pid uint32) (uintptr, error) {
-	var matched uintptr
-	cb := syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
-		var winPID uint32
-		_, _, _ = procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&winPID)))
-		if winPID != pid {
-			return 1
-		}
-		if ret, _, _ := procIsWindowVisible.Call(hwnd); ret == 0 {
-			return 1
-		}
-		var buf [256]uint16
-		n, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-		if n == 0 {
-			return 1
-		}
-		class := syscall.UTF16ToString(buf[:n])
-		if class == input.MozillaWindowClass {
-			matched = hwnd
-			return 0 // stop
-		}
-		return 1
+	findHwndOnce.Do(func() {
+		findHwndCB = syscall.NewCallback(findHwndCallback)
 	})
-
-	_, _, _ = procEnumWindows.Call(cb, 0)
-	return matched, nil
+	findHwndMu.Lock()
+	defer findHwndMu.Unlock()
+	findHwndPID = pid
+	findHwndOut = 0
+	_, _, _ = procEnumWindows.Call(findHwndCB, 0)
+	return findHwndOut, nil
 }
 
 // FocusWindow brings the Firefox window to the foreground. Restores from

@@ -4,17 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
 
 // Navigate drives the page to url and waits for `complete` readiness.
-// Returns ErrNavigate on protocol errors, ErrTimeout on deadline.
-func (p *Page) Navigate(url string, timeout time.Duration) error {
-	ctx, cancel := navCtx(timeout)
-	defer cancel()
-
+// Caller controls the deadline via ctx — wrap with context.WithTimeout to
+// bound the call. Returns ErrNavigate on protocol errors, ErrTimeout on
+// ctx deadline, ErrContextCanceled on ctx cancel.
+func (p *Page) Navigate(ctx context.Context, url string) error {
 	res, err := p.browser.client.Navigate(ctx, bidi.NavigateParams{
 		Context: p.contextID,
 		URL:     url,
@@ -29,10 +27,8 @@ func (p *Page) Navigate(url string, timeout time.Duration) error {
 	return nil
 }
 
-// Reload reissues the current URL.
-func (p *Page) Reload(timeout time.Duration) error {
-	ctx, cancel := navCtx(timeout)
-	defer cancel()
+// Reload reissues the current URL. ctx bounds the call.
+func (p *Page) Reload(ctx context.Context) error {
 	if err := p.browser.client.Reload(ctx, bidi.ReloadParams{
 		Context: p.contextID,
 		Wait:    bidi.WaitComplete,
@@ -42,15 +38,13 @@ func (p *Page) Reload(timeout time.Duration) error {
 	return nil
 }
 
-// GoBack moves history -1. timeout=0 → 10s default.
-func (p *Page) GoBack(timeout time.Duration) error { return p.traverse(-1, timeout) }
+// GoBack moves history -1. ctx bounds the call.
+func (p *Page) GoBack(ctx context.Context) error { return p.traverse(ctx, -1) }
 
-// GoForward moves history +1. timeout=0 → 10s default.
-func (p *Page) GoForward(timeout time.Duration) error { return p.traverse(+1, timeout) }
+// GoForward moves history +1. ctx bounds the call.
+func (p *Page) GoForward(ctx context.Context) error { return p.traverse(ctx, +1) }
 
-func (p *Page) traverse(delta int, timeout time.Duration) error {
-	ctx, cancel := navCtx(timeout)
-	defer cancel()
+func (p *Page) traverse(ctx context.Context, delta int) error {
 	if err := p.browser.client.TraverseHistory(ctx, bidi.TraverseHistoryParams{
 		Context: p.contextID,
 		Delta:   delta,
@@ -58,13 +52,6 @@ func (p *Page) traverse(delta int, timeout time.Duration) error {
 		return wrapNavErr(err)
 	}
 	return nil
-}
-
-func navCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	return context.WithTimeout(context.Background(), timeout)
 }
 
 func wrapNavErr(err error) error {

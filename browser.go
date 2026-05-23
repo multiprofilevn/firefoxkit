@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
@@ -82,7 +83,14 @@ func (b *Browser) Close() error {
 		b.pages = nil
 		b.current = nil
 		b.pagesMu.Unlock()
-		_ = pages // pages share the BiDi client; closing it cancels their work
+		// Best-effort per-page cleanup BEFORE the BiDi client tears down —
+		// once the WS is closed, RemoveIntercept/Unsubscribe RPCs will fail.
+		// Use a short background ctx since callers of Close() don't pass one.
+		cleanupCtx, ccancel := context.WithTimeout(context.Background(), 3*time.Second)
+		for _, p := range pages {
+			p.cleanup(cleanupCtx)
+		}
+		ccancel()
 
 		if b.client != nil {
 			if err := b.client.Close(); err != nil {
