@@ -47,6 +47,40 @@ You'll know defaults are off when:
 
 `Scale` should match the OS display scaling. On Windows: Settings → Display → Scale and layout (100% = 1.0, 125% = 1.25). Wrong Scale causes clicks to drift more the farther they are from the content origin — a tell-tale sign you need to fix Scale rather than the offsets.
 
+## Gotcha: `syscall.NewCallback` exhaustion
+
+The Go runtime maintains a **fixed-size table** for Windows callbacks (~1024 slots on amd64). `syscall.NewCallback` allocates one slot **and never frees it** — there is no GC for these.
+
+If you call `NewCallback` inside a function that runs on every operation (e.g. `findFirefoxHWND` calling `syscall.NewCallback` every `EnumWindows`), the process will panic with `"callback gc table full"` after ~1024 calls.
+
+**Always hoist callbacks to package-level `sync.Once`** + thread state through a mutex-protected package var, not a closure capture:
+
+```go
+var (
+    findHwndCBOnce sync.Once
+    findHwndCB     uintptr
+    findHwndMu     sync.Mutex
+    findHwndPID    uint32
+    findHwndOut    uintptr
+)
+
+func findFirefoxHWND(pid uint32) (uintptr, error) {
+    findHwndCBOnce.Do(func() {
+        findHwndCB = syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+            // ... use findHwndPID, write to findHwndOut
+        })
+    })
+    findHwndMu.Lock()
+    defer findHwndMu.Unlock()
+    findHwndPID = pid
+    findHwndOut = 0
+    _, _, _ = procEnumWindows.Call(findHwndCB, 0)
+    return findHwndOut, nil
+}
+```
+
+The closure-capture pattern (defining `cb := syscall.NewCallback(func() { ...captures... })` every call) is **always wrong**.
+
 ## Across multiple monitors
 
 Firefox's screen coordinates span the virtual desktop. `window_x` can be negative on a secondary monitor positioned to the left of the primary. `pickFreePort` + `Launch` don't position the window — use `WithFlag("-foreground", "")` and let the OS place it, then query `Browser.HWND()` to read `GetWindowRect` for the actual position.

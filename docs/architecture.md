@@ -68,6 +68,20 @@ commands no one calls.
 6. Opens `bidi.Client`, calls `session.new` with capabilities.
 7. `getTree` populates initial Page list. Returns Browser.
 
+## Public API contract: context propagation
+
+**Every public method that issues a BiDi RPC must accept `ctx context.Context` as its first argument. Never use `context.Background()` internally for caller-initiated work.**
+
+Why: the library lives inside larger pipelines (HTTP handlers, background workers, test runners). Callers expect cancellation to propagate end-to-end. If `Navigate(url, timeout)` synthesizes its own background ctx, an HTTP handler whose request was canceled keeps a stale Firefox tab loading for 30s after the client gave up — wasting BiDi quota and leaking goroutines.
+
+Rules:
+- **Direct RPC** (Evaluate, Screenshot, Cookies, BoundingBox, Click, Type, ...): take ctx explicitly.
+- **Polling helpers** (WaitForReady, WaitForSelector, ...): take ctx, derive per-attempt sub-contexts from it, propagate cancellation both inward and outward.
+- **Event subscriptions** (OnDialog, OnConsole): take ctx for the *subscription call*, but the handler invocations happen on the event-bus goroutine with their own ctx (typically a fresh `context.Background` since the event isn't bound to a caller).
+- **Lifecycle** (Close, ClosePage): may use `context.Background()` for shutdown — those are not caller-driven, they're cleanup.
+
+What violates the rule: `func (p *Page) Navigate(url string, timeout time.Duration) error` — no ctx, synthesizes a background one internally. Fix: change to `func (p *Page) Navigate(ctx context.Context, url string) error` and let caller wrap with `context.WithTimeout` upstream.
+
 ## Connect flow
 
 Same as Launch but skips steps 1-5: assumes Firefox already listening on
