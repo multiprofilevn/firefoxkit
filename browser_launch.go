@@ -126,6 +126,7 @@ func Launch(firefoxPath string, opts ...Option) (*Browser, error) {
 		wsURL:     wsURL,
 		sessionID: sess.SessionID,
 	}
+	b.initBaseCtx()
 
 	if err := b.populateInitialPage(ctx); err != nil {
 		_ = b.Close()

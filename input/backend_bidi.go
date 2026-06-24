@@ -95,6 +95,22 @@ func (b *BackendBiDi) KeyChar(ctx context.Context, ch rune) error {
 	))
 }
 
+// KeyCharWithMods sends modDown(s) → keyDown(ch) → keyUp(ch) → modUp(s) so
+// that modifier keys are held for the character press. Used by KeyboardAPI
+// when a printable char has no VK mapping but modifiers are requested.
+func (b *BackendBiDi) KeyCharWithMods(ctx context.Context, ch rune, modKeys []string) error {
+	v := string(ch)
+	actions := make([]map[string]any, 0, len(modKeys)*2+2)
+	for _, m := range modKeys {
+		actions = append(actions, bidi.KeyDown(m))
+	}
+	actions = append(actions, bidi.KeyDown(v), bidi.KeyUp(v))
+	for i := len(modKeys) - 1; i >= 0; i-- {
+		actions = append(actions, bidi.KeyUp(modKeys[i]))
+	}
+	return b.perform(ctx, b.keySource(actions...))
+}
+
 // InsertText sends a sequence of characters as one performActions call —
 // faster than per-char dispatch.
 func (b *BackendBiDi) InsertText(ctx context.Context, text string) error {
@@ -119,6 +135,36 @@ func (b *BackendBiDi) KeyCombo(ctx context.Context, vk uint16, mods Modifier) er
 	}
 	actions = append(actions, bidi.KeyDown(target), bidi.KeyUp(target))
 	// Release modifiers in reverse order to mirror real keyboard behavior.
+	for i := len(modKeys) - 1; i >= 0; i-- {
+		actions = append(actions, bidi.KeyUp(modKeys[i]))
+	}
+	return b.perform(ctx, b.keySource(actions...))
+}
+
+// KeyDown sends modDown(s) → keyDown(target) without releasing. Pair with
+// KeyUp to simulate held keys. modKeys must match what was passed to KeyDown.
+func (b *BackendBiDi) KeyDown(ctx context.Context, vk uint16, modKeys []string) error {
+	target, ok := VKValue(vk)
+	if !ok {
+		return fmt.Errorf("%w: vk=0x%X", ErrInvalidKey, vk)
+	}
+	actions := make([]map[string]any, 0, len(modKeys)+1)
+	for _, m := range modKeys {
+		actions = append(actions, bidi.KeyDown(m))
+	}
+	actions = append(actions, bidi.KeyDown(target))
+	return b.perform(ctx, b.keySource(actions...))
+}
+
+// KeyUp sends keyUp(target) → modUp(s) in reverse order. modKeys must match
+// what was passed to the corresponding KeyDown call.
+func (b *BackendBiDi) KeyUp(ctx context.Context, vk uint16, modKeys []string) error {
+	target, ok := VKValue(vk)
+	if !ok {
+		return fmt.Errorf("%w: vk=0x%X", ErrInvalidKey, vk)
+	}
+	actions := make([]map[string]any, 0, len(modKeys)+1)
+	actions = append(actions, bidi.KeyUp(target))
 	for i := len(modKeys) - 1; i >= 0; i-- {
 		actions = append(actions, bidi.KeyUp(modKeys[i]))
 	}

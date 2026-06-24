@@ -21,7 +21,7 @@ type headerInjector struct {
 // SetExtraHeaders merges headers into every subsequent request from this page.
 // Passing an empty map removes the injector. Idempotent; later calls replace
 // the active set rather than accumulating.
-func (p *Page) SetExtraHeaders(ctx context.Context, headers map[string]string) error {
+func (p *Page) SetExtraHeaders(headers map[string]string) error {
 	p.hdrOnce.Do(func() { p.hdr = &headerInjector{headers: map[string]string{}} })
 	hi := p.hdr
 
@@ -34,12 +34,12 @@ func (p *Page) SetExtraHeaders(ctx context.Context, headers map[string]string) e
 	hi.mu.Unlock()
 
 	if len(headers) == 0 {
-		return p.removeHeaderInterceptor(ctx)
+		return p.removeHeaderInterceptor(p.ctx())
 	}
 	if !needInstall {
 		return nil
 	}
-	return p.installHeaderInterceptor(ctx)
+	return p.installHeaderInterceptor(p.ctx())
 }
 
 func (p *Page) installHeaderInterceptor(ctx context.Context) error {

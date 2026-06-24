@@ -32,6 +32,22 @@ const (
 	KeyMeta       = ""
 )
 
+// W3C WebDriver function-key Unicode codepoints (U+E031–U+E03C).
+const (
+	KeyF1  = ""
+	KeyF2  = ""
+	KeyF3  = ""
+	KeyF4  = ""
+	KeyF5  = ""
+	KeyF6  = ""
+	KeyF7  = ""
+	KeyF8  = ""
+	KeyF9  = ""
+	KeyF10 = ""
+	KeyF11 = ""
+	KeyF12 = ""
+)
+
 // vkToCode maps Win32 virtual-key codes to W3C WebDriver key values, so the
 // BiDi backend can dispatch KeyCombo with the same VK_* constants the native
 // backend uses.
@@ -40,6 +56,8 @@ var vkToCode = map[uint16]string{
 	VKBackspace: KeyBackspace,
 	VKEscape:    KeyEscape,
 	VKTab:       KeyTab,
+	VKPageUp:    KeyPageUp,
+	VKPageDown:  KeyPageDown,
 	VKEnd:       KeyEnd,
 	VKHome:      KeyHome,
 	VKLeft:      KeyArrowLeft,
@@ -47,6 +65,23 @@ var vkToCode = map[uint16]string{
 	VKRight:     KeyArrowRight,
 	VKDown:      KeyArrowDown,
 	VKDelete:    KeyDelete,
+	VKSpace:     KeySpace,
+	VKShift:     KeyShift,
+	VKControl:   KeyControl,
+	VKMenu:      KeyAlt,
+	VKWin:       KeyMeta,
+	VKF1:        KeyF1,
+	VKF2:        KeyF2,
+	VKF3:        KeyF3,
+	VKF4:        KeyF4,
+	VKF5:        KeyF5,
+	VKF6:        KeyF6,
+	VKF7:        KeyF7,
+	VKF8:        KeyF8,
+	VKF9:        KeyF9,
+	VKF10:       KeyF10,
+	VKF11:       KeyF11,
+	VKF12:       KeyF12,
 }
 
 // vkToRune maps the printable-letter VKs to their lowercase Unicode rune.

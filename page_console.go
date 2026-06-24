@@ -7,16 +7,19 @@ import "time"
 type ConsoleLevel string
 
 const (
+	ConsoleLog   ConsoleLevel = "log"
 	ConsoleDebug ConsoleLevel = "debug"
 	ConsoleInfo  ConsoleLevel = "info"
 	ConsoleWarn  ConsoleLevel = "warn"
 	ConsoleError ConsoleLevel = "error"
 )
 
-// ConsoleMessage is a single console.* entry.
-type ConsoleMessage struct {
+// ConsoleEvent is a single console.* entry. Level and Text match the
+// chromekit ConsoleEvent shape for drop-in parity. Method and Timestamp
+// are Firefox-specific extras retained for callers that need them.
+type ConsoleEvent struct {
 	Level     ConsoleLevel
 	Text      string
-	Method    string // "log" | "info" | "warn" | "error" | "debug" | "trace" ...
-	Timestamp time.Time
+	Method    string    // "log" | "info" | "warn" | "error" | "debug" | "trace" …
+	Timestamp time.Time // wall time of the log entry
 }

@@ -44,7 +44,7 @@ func TestDialogTypeConstants(t *testing.T) {
 }
 
 func TestConsoleLevelConstants(t *testing.T) {
-	if ConsoleDebug != "debug" || ConsoleInfo != "info" ||
+	if ConsoleLog != "log" || ConsoleDebug != "debug" || ConsoleInfo != "info" ||
 		ConsoleWarn != "warn" || ConsoleError != "error" {
 		t.Errorf("console level constants drifted")
 	}
@@ -55,4 +55,37 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// TestPage_SetSelectValue_SignatureCheck verifies SetSelectValue compiles with
+// the correct chromekit-parity signature: (selector, value string) error.
+// We use a compile-time assignment instead of calling into the nil bidi client.
+func TestPage_SetSelectValue_SignatureCheck(t *testing.T) {
+	// Confirm the method set exists with the right signature at compile time.
+	var _ func(string, string) error = (&Page{}).SetSelectValue
+}
+
+// TestPermission_Constants verifies the Permission constants match the
+// chromekit-canonical W3C strings exactly.
+func TestPermission_Constants(t *testing.T) {
+	cases := []struct {
+		got  Permission
+		want string
+	}{
+		{PermissionGeolocation, "geolocation"},
+		{PermissionCamera, "camera"},
+		{PermissionMicrophone, "microphone"},
+		{PermissionNotifications, "notifications"},
+		{PermissionClipboardRead, "clipboard-read"},
+		{PermissionClipboardWrite, "clipboard-write"},
+		{PermissionMIDI, "midi"},
+		{PermissionMIDISysex, "midi-sysex"},
+		{PermissionBackgroundSync, "background-sync"},
+		{PermissionPersistentStorage, "persistent-storage"},
+	}
+	for _, c := range cases {
+		if string(c.got) != c.want {
+			t.Errorf("Permission %q: got %q, want %q", c.want, c.got, c.want)
+		}
+	}
 }

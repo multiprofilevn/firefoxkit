@@ -68,6 +68,8 @@ const (
 	VKBackspace uint16 = 0x08
 	VKEscape    uint16 = 0x1B
 	VKTab       uint16 = 0x09
+	VKPageUp    uint16 = 0x21
+	VKPageDown  uint16 = 0x22
 	VKEnd       uint16 = 0x23
 	VKHome      uint16 = 0x24
 	VKLeft      uint16 = 0x25
@@ -75,9 +77,29 @@ const (
 	VKRight     uint16 = 0x27
 	VKDown      uint16 = 0x28
 	VKDelete    uint16 = 0x2E
-	VKA         uint16 = 0x41
-	VKL         uint16 = 0x4C
-	VKT         uint16 = 0x54
+	VKSpace     uint16 = 0x20
+	// Modifier virtual-key codes.
+	VKShift   uint16 = 0x10
+	VKControl uint16 = 0x11
+	VKMenu    uint16 = 0x12 // Alt
+	VKWin     uint16 = 0x5B // Left Windows key
+	// Letter keys used by ClearInput and combos.
+	VKA uint16 = 0x41
+	VKL uint16 = 0x4C
+	VKT uint16 = 0x54
+	// Function keys F1–F12.
+	VKF1  uint16 = 0x70
+	VKF2  uint16 = 0x71
+	VKF3  uint16 = 0x72
+	VKF4  uint16 = 0x73
+	VKF5  uint16 = 0x74
+	VKF6  uint16 = 0x75
+	VKF7  uint16 = 0x76
+	VKF8  uint16 = 0x77
+	VKF9  uint16 = 0x78
+	VKF10 uint16 = 0x79
+	VKF11 uint16 = 0x7A
+	VKF12 uint16 = 0x7B
 )
 
 // NewNative returns the platform-specific native backend (winapi on Windows,

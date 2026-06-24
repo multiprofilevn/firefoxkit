@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
 
 // Navigate drives the page to url and waits for `complete` readiness.
-// Caller controls the deadline via ctx — wrap with context.WithTimeout to
-// bound the call. Returns ErrNavigate on protocol errors, ErrTimeout on
-// ctx deadline, ErrContextCanceled on ctx cancel.
-func (p *Page) Navigate(ctx context.Context, url string) error {
+// timeout <= 0 means no deadline (base context only).
+func (p *Page) Navigate(url string, timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
 	res, err := p.browser.client.Navigate(ctx, bidi.NavigateParams{
 		Context: p.contextID,
 		URL:     url,
@@ -27,8 +28,10 @@ func (p *Page) Navigate(ctx context.Context, url string) error {
 	return nil
 }
 
-// Reload reissues the current URL. ctx bounds the call.
-func (p *Page) Reload(ctx context.Context) error {
+// Reload reissues the current URL. timeout <= 0 means no deadline.
+func (p *Page) Reload(timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
 	if err := p.browser.client.Reload(ctx, bidi.ReloadParams{
 		Context: p.contextID,
 		Wait:    bidi.WaitComplete,
@@ -38,11 +41,19 @@ func (p *Page) Reload(ctx context.Context) error {
 	return nil
 }
 
-// GoBack moves history -1. ctx bounds the call.
-func (p *Page) GoBack(ctx context.Context) error { return p.traverse(ctx, -1) }
+// GoBack moves history -1. timeout <= 0 means no deadline.
+func (p *Page) GoBack(timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
+	return p.traverse(ctx, -1)
+}
 
-// GoForward moves history +1. ctx bounds the call.
-func (p *Page) GoForward(ctx context.Context) error { return p.traverse(ctx, +1) }
+// GoForward moves history +1. timeout <= 0 means no deadline.
+func (p *Page) GoForward(timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
+	return p.traverse(ctx, +1)
+}
 
 func (p *Page) traverse(ctx context.Context, delta int) error {
 	if err := p.browser.client.TraverseHistory(ctx, bidi.TraverseHistoryParams{
@@ -52,6 +63,16 @@ func (p *Page) traverse(ctx context.Context, delta int) error {
 		return wrapNavErr(err)
 	}
 	return nil
+}
+
+// GetOrigin returns the page's scheme://host[:port] origin via location.origin.
+// Blocking; uses the browser base ctx (chromekit parity).
+func (p *Page) GetOrigin() (string, error) {
+	var origin string
+	if err := p.Evaluate(`location.origin`, &origin); err != nil {
+		return "", err
+	}
+	return origin, nil
 }
 
 func wrapNavErr(err error) error {

@@ -10,15 +10,15 @@ import (
 // Tracks position so MoveTo can interpolate from where it left off.
 type Cursor struct {
 	backend Backend
-	profile CursorProfile
+	profile Profile
 	x, y    float64
 }
 
 // NewCursor builds a Cursor with the default human profile.
-func NewCursor(b Backend) *Cursor { return &Cursor{backend: b, profile: CursorHuman} }
+func NewCursor(b Backend) *Cursor { return &Cursor{backend: b, profile: ProfileHuman} }
 
 // NewCursorWithProfile builds a Cursor with an explicit movement profile.
-func NewCursorWithProfile(b Backend, p CursorProfile) *Cursor {
+func NewCursorWithProfile(b Backend, p Profile) *Cursor {
 	return &Cursor{backend: b, profile: p}
 }
 
@@ -46,13 +46,13 @@ func (c *Cursor) MoveTo(ctx context.Context, x, y float64) error {
 	defer func() { c.x, c.y = x, y }()
 
 	switch c.profile {
-	case CursorMachine:
+	case ProfileMachine:
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		return c.backend.MouseMove(ctx, x, y)
 
-	case CursorFast:
+	case ProfileFast:
 		steps := stepCount(c.x, c.y, x, y)
 		for _, p := range interpolate(c.x, c.y, x, y, steps) {
 			if err := ctx.Err(); err != nil {
@@ -65,7 +65,7 @@ func (c *Cursor) MoveTo(ctx context.Context, x, y float64) error {
 		}
 		return nil
 
-	default: // CursorHuman
+	default: // ProfileHuman
 		steps := humanStepCount(c.x, c.y, x, y)
 		for _, p := range bezierPath(c.x, c.y, x, y, steps) {
 			if err := ctx.Err(); err != nil {

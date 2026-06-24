@@ -3,7 +3,6 @@ package firefoxkit
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
@@ -30,9 +29,9 @@ func (b *Browser) populateInitialPage(ctx context.Context) error {
 	return nil
 }
 
-// NewPage opens a new tab and makes it current. Honors ctx for the
-// browsingContext.create RPC.
-func (b *Browser) NewPage(ctx context.Context) (*Page, error) {
+// NewPage opens a new tab and makes it current.
+func (b *Browser) NewPage() (*Page, error) {
+	ctx := b.ctx()
 	res, err := b.client.Create(ctx, bidi.CreateParams{Type: "tab"})
 	if err != nil {
 		return nil, fmt.Errorf("%w: browsingContext.create: %v", ErrBiDiSessionFailed, err)
@@ -46,9 +45,9 @@ func (b *Browser) NewPage(ctx context.Context) (*Page, error) {
 }
 
 // ClosePage closes the page with the given id. Returns ErrCannotCloseLastPage
-// if it's the only page (use Browser.Close to shut down instead). Honors ctx
-// for both the per-page cleanup and the CloseContext RPC.
-func (b *Browser) ClosePage(ctx context.Context, id string) error {
+// if it's the only page (use Browser.Close to shut down instead).
+func (b *Browser) ClosePage(id string) error {
+	ctx := b.ctx()
 	b.pagesMu.Lock()
 	if len(b.pages) <= 1 {
 		b.pagesMu.Unlock()
@@ -76,9 +75,8 @@ func (b *Browser) ClosePage(ctx context.Context, id string) error {
 	return b.client.CloseContext(ctx, bidi.CloseParams{Context: id})
 }
 
-// SwitchPageByIndex makes pages[i] current. Errors if out of range. Honors
-// ctx for the activate RPC.
-func (b *Browser) SwitchPageByIndex(ctx context.Context, i int) error {
+// SwitchPageByIndex makes pages[i] current. Errors if out of range.
+func (b *Browser) SwitchPageByIndex(i int) error {
 	b.pagesMu.Lock()
 	if i < 0 || i >= len(b.pages) {
 		b.pagesMu.Unlock()
@@ -87,15 +85,15 @@ func (b *Browser) SwitchPageByIndex(ctx context.Context, i int) error {
 	b.current = b.pages[i]
 	target := b.current.contextID
 	b.pagesMu.Unlock()
-	return b.activate(ctx, target)
+	return b.activate(b.ctx(), target)
 }
 
-// SwitchPageByURL makes the first page whose URL contains needle current.
-func (b *Browser) SwitchPageByURL(ctx context.Context, needle string) error {
+// SwitchPageByURL makes the first page whose URL contains url current.
+func (b *Browser) SwitchPageByURL(url string) error {
 	b.pagesMu.Lock()
 	var target string
 	for _, p := range b.pages {
-		if matchPage(p.URL(), needle) {
+		if matchPage(p.URL(), url) {
 			b.current = p
 			target = p.contextID
 			break
@@ -105,12 +103,83 @@ func (b *Browser) SwitchPageByURL(ctx context.Context, needle string) error {
 	if target == "" {
 		return ErrPageNotFound
 	}
-	return b.activate(ctx, target)
+	return b.activate(b.ctx(), target)
 }
 
-// SwitchPageByOrigin is a sugar wrapper for matching scheme://host.
-func (b *Browser) SwitchPageByOrigin(ctx context.Context, origin string) error {
-	return b.SwitchPageByURL(ctx, strings.TrimRight(origin, "/"))
+// SwitchPageByOrigin switches to another page whose origin matches the current
+// page's origin. Mirrors chromekit: no argument — the target origin is read
+// from the current page.
+func (b *Browser) SwitchPageByOrigin() error {
+	cur := b.Current()
+	if cur == nil {
+		return ErrPageNotFound
+	}
+	origin, err := cur.GetOrigin()
+	if err != nil {
+		return err
+	}
+
+	// Snapshot candidate pages under RLock — do NOT call GetOrigin (JS eval)
+	// while holding the lock to avoid long-hold / potential deadlock.
+	b.pagesMu.RLock()
+	candidates := make([]*Page, 0, len(b.pages))
+	for _, p := range b.pages {
+		if p != cur {
+			candidates = append(candidates, p)
+		}
+	}
+	b.pagesMu.RUnlock()
+
+	// Eval origins outside the lock.
+	var matched *Page
+	for _, p := range candidates {
+		if o, e := p.GetOrigin(); e == nil && o == origin {
+			matched = p
+			break
+		}
+	}
+	if matched == nil {
+		return ErrPageNotFound
+	}
+
+	// Short critical section: just update b.current and grab contextID.
+	b.pagesMu.Lock()
+	b.current = matched
+	target := matched.contextID
+	b.pagesMu.Unlock()
+
+	return b.activate(b.ctx(), target)
+}
+
+// ClosePagesNotMatching closes every page whose URL does NOT contain keep,
+// leaving the matching page(s) open. Never closes the last remaining page.
+func (b *Browser) ClosePagesNotMatching(keep string) error {
+	b.pagesMu.RLock()
+	var victims []string
+	for _, p := range b.pages {
+		if !matchPage(p.URL(), keep) {
+			victims = append(victims, p.contextID)
+		}
+	}
+	b.pagesMu.RUnlock()
+	for _, id := range victims {
+		if err := b.ClosePage(id); err != nil {
+			if err == ErrCannotCloseLastPage {
+				break
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// GoBack navigates the current page back one entry in session history.
+func (b *Browser) GoBack() error {
+	cur := b.Current()
+	if cur == nil {
+		return ErrPageNotFound
+	}
+	return cur.traverse(cur.ctx(), -1)
 }
 
 // activate sends browsingContext.activate. Failure logged-not-returned —

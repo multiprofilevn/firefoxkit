@@ -1,7 +1,6 @@
 package firefoxkit
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -16,8 +15,9 @@ type TypeSelectorConfig struct {
 	// MaxAttempts caps how many times the loop will Clear→Type→Verify before
 	// giving up with ErrTypeSelectorMismatch. Default 3.
 	MaxAttempts int
-	// HumanCfg tunes the per-char cadence. Zero values use TypeHuman defaults.
-	HumanCfg input.HumanTypeConfig
+	// Human tunes the per-char cadence. Zero values use TypeHuman defaults.
+	// Matches chromekit TypeSelectorConfig.Human for drop-in parity.
+	Human input.HumanTypeConfig
 }
 
 func (c TypeSelectorConfig) withDefaults() TypeSelectorConfig {
@@ -27,10 +27,9 @@ func (c TypeSelectorConfig) withDefaults() TypeSelectorConfig {
 	return c
 }
 
-// TypeSelector focuses sel, clears, types text via TypeHuman, then reads the
-// element's value back and retries on mismatch. Returns nil on success,
-// ErrTypeSelectorMismatch on persistent mismatch, ErrPageNotFound if sel misses.
-func (k *Keyboard) TypeSelector(ctx context.Context, sel, text string, cfg ...TypeSelectorConfig) error {
+// typeSelectorImpl is shared by KeyboardAPI.TypeSelector. Keeping the logic
+// here avoids duplication if additional entry points are added later.
+func typeSelectorImpl(k *KeyboardAPI, sel, text string, cfg ...TypeSelectorConfig) error {
 	c := TypeSelectorConfig{}
 	if len(cfg) > 0 {
 		c = cfg[0]
@@ -38,20 +37,20 @@ func (k *Keyboard) TypeSelector(ctx context.Context, sel, text string, cfg ...Ty
 	c = c.withDefaults()
 
 	for attempt := 0; attempt < c.MaxAttempts; attempt++ {
-		if err := ctx.Err(); err != nil {
+		if err := k.p.ctx().Err(); err != nil {
 			return err
 		}
-		if err := k.p.Focus(ctx, sel); err != nil {
+		if err := k.p.Focus(sel); err != nil {
 			return err
 		}
-		if err := k.ClearInput(ctx); err != nil {
+		if err := k.ClearInput(); err != nil {
 			return err
 		}
-		if err := k.TypeHuman(ctx, text, c.HumanCfg); err != nil {
+		if err := k.TypeHuman(text, c.Human); err != nil {
 			return err
 		}
 		var got string
-		if err := k.p.EvalSelector(ctx, sel, `(el) => el.value ?? el.textContent ?? ""`, &got); err != nil {
+		if err := k.p.EvalSelector(sel, `(el) => el.value ?? el.textContent ?? ""`, &got); err != nil {
 			return err
 		}
 		if c.Strict {

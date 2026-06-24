@@ -31,32 +31,27 @@ func main() {
 	}
 	defer b.Close()
 
-	if err := b.FocusWindow(); err != nil {
-		log.Printf("FocusWindow: %v (input may miss)", err)
+	if err := b.Focus(context.Background()); err != nil {
+		log.Printf("Focus: %v (input may miss)", err)
 	}
 
 	p := b.Current()
 
-	navCtx, navCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	if err := p.Navigate(navCtx, *target); err != nil {
-		navCancel()
+	if err := p.Navigate(*target, 30*time.Second); err != nil {
 		log.Fatalf("Navigate: %v", err)
 	}
-	navCancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := p.WaitForReady(ctx, 10*time.Second); err != nil {
+	if err := p.WaitForReady(10 * time.Second); err != nil {
 		log.Printf("WaitForReady: %v", err)
 	}
 
 	// Click at the center of the viewport — replace with a real bounding-box
 	// lookup in real code.
-	if err := p.Mouse().ClickAt(ctx, 400, 300); err != nil {
+	if err := p.Mouse().ClickAt(400, 300); err != nil {
 		log.Printf("ClickAt: %v", err)
 	}
 
-	if err := p.Keyboard().Type(ctx, "Hello from native input"); err != nil {
+	if err := p.Keyboard().Type("Hello from native input"); err != nil {
 		log.Printf("Type: %v", err)
 	}
 

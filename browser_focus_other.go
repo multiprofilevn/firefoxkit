@@ -2,8 +2,13 @@
 
 package firefoxkit
 
+import "context"
+
 // HWND is Windows-only. Stub returns 0.
 func (b *Browser) HWND() (uintptr, error) { return 0, ErrNativeNotSupported }
 
-// FocusWindow is Windows-only.
-func (b *Browser) FocusWindow() error { return ErrNativeNotSupported }
+// Focus is Windows-only. The ctx parameter mirrors chromekit's signature.
+func (b *Browser) Focus(ctx context.Context) error { return ErrNativeNotSupported }
+
+// ContentOffset is Windows-only.
+func (b *Browser) ContentOffset() (int, int, error) { return 0, 0, ErrNativeNotSupported }

@@ -166,7 +166,7 @@ func (p *Page) FrameByName(ctx context.Context, name string) (*Frame, error) {
 	}
 	expr := `Array.from(document.querySelectorAll("iframe")).map(f => ({name: f.name || "", src: f.src || ""}))`
 	var infos []iframeInfo
-	if err := p.Evaluate(ctx, expr, &infos); err != nil {
+	if err := p.Evaluate(expr, &infos); err != nil {
 		return nil, err
 	}
 	for _, info := range infos {

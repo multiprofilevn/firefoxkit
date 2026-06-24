@@ -1,9 +1,6 @@
 package firefoxkit
 
-import (
-	"errors"
-	"testing"
-)
+import "testing"
 
 func TestWithPermissionsDefault_Allow(t *testing.T) {
 	cfg := defaultConfig()
@@ -40,17 +37,26 @@ func TestWithDownloadDir(t *testing.T) {
 	}
 }
 
-func TestGrantPermissions_ReturnsUnsupported(t *testing.T) {
+func TestGrantPermissions_TypedSig_NoopRuntime(t *testing.T) {
 	b := &Browser{}
-	err := b.GrantPermissions("https://example.com", "geo")
-	if !errors.Is(err, ErrPermissionsRuntimeUnsupported) {
-		t.Errorf("got %v, want ErrPermissionsRuntimeUnsupported", err)
+	// GrantPermissions now accepts ...Permission (typed, not string).
+	// Firefox runtime grants are a no-op — must return nil, not error.
+	if err := b.GrantPermissions("https://example.com", PermissionGeolocation); err != nil {
+		t.Errorf("GrantPermissions no-op: got %v, want nil", err)
+	}
+	// Multiple permissions must also be fine.
+	if err := b.GrantPermissions("https://example.com", PermissionCamera, PermissionMicrophone); err != nil {
+		t.Errorf("GrantPermissions multi: got %v, want nil", err)
+	}
+	// Empty perm list.
+	if err := b.GrantPermissions("https://example.com"); err != nil {
+		t.Errorf("GrantPermissions empty: got %v, want nil", err)
 	}
 }
 
 func TestResetPermissions_ReturnsUnsupported(t *testing.T) {
 	b := &Browser{}
-	if err := b.ResetPermissions(); !errors.Is(err, ErrPermissionsRuntimeUnsupported) {
+	if err := b.ResetPermissions(); err != ErrPermissionsRuntimeUnsupported {
 		t.Errorf("got %v, want ErrPermissionsRuntimeUnsupported", err)
 	}
 }

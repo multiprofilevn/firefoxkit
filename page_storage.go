@@ -1,75 +1,65 @@
 package firefoxkit
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 )
 
-// StorageAPI groups web-storage namespaces.
-type StorageAPI struct{ p *Page }
-
-// Storage returns the web-storage namespace.
-func (p *Page) Storage() *StorageAPI { return &StorageAPI{p: p} }
-
-// Local returns the localStorage namespace.
-func (a *StorageAPI) Local() *WebStorage {
-	return &WebStorage{p: a.p, name: "localStorage"}
-}
-
-// Session returns the sessionStorage namespace.
-func (a *StorageAPI) Session() *WebStorage {
-	return &WebStorage{p: a.p, name: "sessionStorage"}
-}
-
-// WebStorage wraps either localStorage or sessionStorage. All ops execute
-// via script.evaluate against the page's realm — content-script isolation
-// not currently supported.
-type WebStorage struct {
+// Storage is a thin wrapper over localStorage or sessionStorage. Holds no
+// state of its own; every call hits the page via Evaluate.
+type Storage struct {
 	p    *Page
 	name string // "localStorage" | "sessionStorage"
 }
 
+// LocalStorage returns a handle to the page's window.localStorage.
+func (p *Page) LocalStorage() *Storage { return &Storage{p: p, name: "localStorage"} }
+
+// SessionStorage returns a handle to the page's window.sessionStorage.
+func (p *Page) SessionStorage() *Storage { return &Storage{p: p, name: "sessionStorage"} }
+
 // Get returns the value for key, or "" if absent.
-func (w *WebStorage) Get(ctx context.Context, key string) (string, error) {
+func (s *Storage) Get(key string) (string, error) {
 	keyJSON, _ := json.Marshal(key)
-	expr := fmt.Sprintf(`window.%s.getItem(%s) || ""`, w.name, string(keyJSON))
+	expr := fmt.Sprintf(`window.%s.getItem(%s) || ""`, s.name, string(keyJSON))
 	var v string
-	if err := w.p.Evaluate(ctx, expr, &v); err != nil {
+	if err := s.p.Evaluate(expr, &v); err != nil {
 		return "", err
 	}
 	return v, nil
 }
 
 // Set writes value at key.
-func (w *WebStorage) Set(ctx context.Context, key, value string) error {
+func (s *Storage) Set(key, value string) error {
 	keyJSON, _ := json.Marshal(key)
 	valJSON, _ := json.Marshal(value)
 	expr := fmt.Sprintf(`(function(){ window.%s.setItem(%s, %s); return true; })()`,
-		w.name, string(keyJSON), string(valJSON))
-	return w.p.Evaluate(ctx, expr, nil)
+		s.name, string(keyJSON), string(valJSON))
+	return s.p.Evaluate(expr, nil)
 }
 
-// Remove deletes key.
-func (w *WebStorage) Remove(ctx context.Context, key string) error {
+// Remove deletes key (no-op if missing).
+func (s *Storage) Remove(key string) error {
 	keyJSON, _ := json.Marshal(key)
 	expr := fmt.Sprintf(`(function(){ window.%s.removeItem(%s); return true; })()`,
-		w.name, string(keyJSON))
-	return w.p.Evaluate(ctx, expr, nil)
+		s.name, string(keyJSON))
+	return s.p.Evaluate(expr, nil)
 }
 
-// Clear empties the storage.
-func (w *WebStorage) Clear(ctx context.Context) error {
-	expr := fmt.Sprintf(`(function(){ window.%s.clear(); return true; })()`, w.name)
-	return w.p.Evaluate(ctx, expr, nil)
+// Clear empties the storage for the current origin.
+func (s *Storage) Clear() error {
+	expr := fmt.Sprintf(`(function(){ window.%s.clear(); return true; })()`, s.name)
+	return s.p.Evaluate(expr, nil)
 }
 
-// Keys returns the list of keys in deterministic order (Storage iteration order).
-func (w *WebStorage) Keys(ctx context.Context) ([]string, error) {
-	expr := fmt.Sprintf(`(function(){ const out = []; for (let i=0; i<window.%s.length; i++) out.push(window.%s.key(i)); return out; })()`,
-		w.name, w.name)
+// Keys returns the list of keys in storage iteration order. Extra FF method
+// not present in chromekit — retained for backward compatibility.
+func (s *Storage) Keys() ([]string, error) {
+	expr := fmt.Sprintf(
+		`(function(){ const out = []; for (let i=0; i<window.%s.length; i++) out.push(window.%s.key(i)); return out; })()`,
+		s.name, s.name)
 	var keys []string
-	if err := w.p.Evaluate(ctx, expr, &keys); err != nil {
+	if err := s.p.Evaluate(expr, &keys); err != nil {
 		return nil, err
 	}
 	return keys, nil

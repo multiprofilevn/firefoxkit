@@ -2,7 +2,6 @@ package firefoxkit
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"fmt"
 	"image/jpeg"
@@ -12,8 +11,8 @@ import (
 )
 
 // Screenshot captures the current viewport as PNG bytes.
-func (p *Page) Screenshot(ctx context.Context) ([]byte, error) {
-	return p.capture(ctx, bidi.CaptureScreenshotParams{
+func (p *Page) Screenshot() ([]byte, error) {
+	return p.capture(bidi.CaptureScreenshotParams{
 		Context: p.contextID,
 		Origin:  "viewport",
 	})
@@ -21,8 +20,8 @@ func (p *Page) Screenshot(ctx context.Context) ([]byte, error) {
 
 // FullScreenshot captures the full document. quality in [1, 100] re-encodes
 // as JPEG; quality >= 100 keeps PNG.
-func (p *Page) FullScreenshot(ctx context.Context, quality int) ([]byte, error) {
-	raw, err := p.capture(ctx, bidi.CaptureScreenshotParams{
+func (p *Page) FullScreenshot(quality int) ([]byte, error) {
+	raw, err := p.capture(bidi.CaptureScreenshotParams{
 		Context: p.contextID,
 		Origin:  "document",
 	})
@@ -36,8 +35,8 @@ func (p *Page) FullScreenshot(ctx context.Context, quality int) ([]byte, error) 
 }
 
 // ScreenshotClip captures a sub-rectangle of the viewport.
-func (p *Page) ScreenshotClip(ctx context.Context, x, y, w, h float64) ([]byte, error) {
-	return p.capture(ctx, bidi.CaptureScreenshotParams{
+func (p *Page) ScreenshotClip(x, y, w, h float64) ([]byte, error) {
+	return p.capture(bidi.CaptureScreenshotParams{
 		Context: p.contextID,
 		Origin:  "viewport",
 		Clip: &bidi.ScreenshotClip{
@@ -48,22 +47,22 @@ func (p *Page) ScreenshotClip(ctx context.Context, x, y, w, h float64) ([]byte, 
 
 // ScreenshotElement captures the bounding box of the first element matching sel.
 // Scrolls into view first.
-func (p *Page) ScreenshotElement(ctx context.Context, sel string) ([]byte, error) {
-	if err := p.ScrollIntoView(ctx, sel); err != nil {
+func (p *Page) ScreenshotElement(sel string) ([]byte, error) {
+	if err := p.ScrollIntoView(sel); err != nil {
 		return nil, err
 	}
-	bb, err := p.BoundingBox(ctx, sel)
+	bb, err := p.BoundingBox(sel)
 	if err != nil {
 		return nil, err
 	}
 	if bb.Width == 0 || bb.Height == 0 {
 		return nil, fmt.Errorf("%w: element has zero size", ErrPageNotFound)
 	}
-	return p.ScreenshotClip(ctx, bb.X, bb.Y, bb.Width, bb.Height)
+	return p.ScreenshotClip(bb.X, bb.Y, bb.Width, bb.Height)
 }
 
-func (p *Page) capture(ctx context.Context, params bidi.CaptureScreenshotParams) ([]byte, error) {
-	res, err := p.browser.client.CaptureScreenshot(ctx, params)
+func (p *Page) capture(params bidi.CaptureScreenshotParams) ([]byte, error) {
+	res, err := p.browser.client.CaptureScreenshot(p.ctx(), params)
 	if err != nil {
 		return nil, err
 	}

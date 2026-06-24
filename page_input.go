@@ -1,7 +1,6 @@
 package firefoxkit
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 )
@@ -9,7 +8,7 @@ import (
 // SetValue programmatically sets el.value and dispatches input + change events.
 // Useful for forms that bind to JS frameworks (React/Vue) which sometimes
 // ignore native typing but watch for these synthetic events.
-func (p *Page) SetValue(ctx context.Context, sel, value string) error {
+func (p *Page) SetValue(sel, value string) error {
 	valJSON, _ := json.Marshal(value)
 	expr := fmt.Sprintf(`(function(){
 		const el = document.querySelector(%q);
@@ -25,7 +24,7 @@ func (p *Page) SetValue(ctx context.Context, sel, value string) error {
 		return true;
 	})()`, sel, string(valJSON), string(valJSON))
 	var ok bool
-	if err := p.Evaluate(ctx, expr, &ok); err != nil {
+	if err := p.Evaluate(expr, &ok); err != nil {
 		return err
 	}
 	if !ok {
@@ -35,7 +34,7 @@ func (p *Page) SetValue(ctx context.Context, sel, value string) error {
 }
 
 // CheckBox sets el.checked = checked on the matched input.
-func (p *Page) CheckBox(ctx context.Context, sel string, checked bool) error {
+func (p *Page) CheckBox(sel string, checked bool) error {
 	expr := fmt.Sprintf(`(function(){
 		const el = document.querySelector(%q);
 		if (!el) return false;
@@ -45,7 +44,7 @@ func (p *Page) CheckBox(ctx context.Context, sel string, checked bool) error {
 		return true;
 	})()`, sel, checked)
 	var ok bool
-	if err := p.Evaluate(ctx, expr, &ok); err != nil {
+	if err := p.Evaluate(expr, &ok); err != nil {
 		return err
 	}
 	if !ok {
