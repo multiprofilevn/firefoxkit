@@ -21,9 +21,16 @@ var (
 	procShowWindow               = user32.NewProc("ShowWindow")
 	procIsIconic                 = user32.NewProc("IsIconic")
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procSetWindowPos             = user32.NewProc("SetWindowPos")
 )
 
 const swRestore = 9
+
+// SetWindowPos flags: keep Z-order and don't steal focus when repositioning.
+const (
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
+)
 
 // Per-process state for findFirefoxHWND. The callback is allocated EXACTLY
 // ONCE via syscall.NewCallback (Go's callback table is a fixed-size slab
@@ -128,4 +135,39 @@ func (b *Browser) ContentOffset() (int, int, error) {
 		return 0, 0, err
 	}
 	return input.MeasureContentOffset(hwnd)
+}
+
+// WindowScale returns the per-monitor DPI scale factor of the Firefox window
+// (1.0 at 96 DPI). Used by the native input backend to map CSS pixels to
+// physical screen pixels under display scaling.
+func (b *Browser) WindowScale() (float64, error) {
+	hwnd, err := b.HWND()
+	if err != nil {
+		return 0, err
+	}
+	return input.MeasureDPIScale(hwnd), nil
+}
+
+// SetWindowBounds positions and sizes the Firefox window in screen pixels.
+// Firefox has no --window-position CLI flag, so native-input callers running
+// multiple profiles use this to tile windows into a non-overlapping grid (a
+// shared OS cursor sends clicks to whichever window sits under the point).
+// Z-order and focus are preserved.
+func (b *Browser) SetWindowBounds(x, y, w, h int) error {
+	hwnd, err := b.HWND()
+	if err != nil {
+		return err
+	}
+	if hwnd == 0 {
+		return fmt.Errorf("firefoxkit: Firefox HWND not found")
+	}
+	ret, _, e := procSetWindowPos.Call(
+		hwnd, 0,
+		uintptr(x), uintptr(y), uintptr(w), uintptr(h),
+		uintptr(swpNoZOrder|swpNoActivate),
+	)
+	if ret == 0 {
+		return fmt.Errorf("SetWindowPos: %v", e)
+	}
+	return nil
 }

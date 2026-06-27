@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tuwibu/firefoxkit/input"
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
 
@@ -21,6 +22,12 @@ type Page struct {
 	title string
 
 	bkCache backendCache
+
+	// cursorOnce guards lazy construction of the human-like cursor engine.
+	// cursor may be pre-set by tests to inject a fake backend; cursorEngine()
+	// honors a non-nil value and skips building a real backend.
+	cursorOnce sync.Once
+	cursor     *input.Cursor
 
 	kbOnce sync.Once
 	kb     *KeyboardAPI

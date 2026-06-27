@@ -25,6 +25,14 @@ func NewCursorWithProfile(b Backend, p Profile) *Cursor {
 // Position returns the last x, y the cursor was moved to.
 func (c *Cursor) Position() (float64, float64) { return c.x, c.y }
 
+// SetPosition updates the tracked position without emitting movement. Use
+// after a raw-backend gesture (e.g. a drag's press-hold-release that bypasses
+// MoveTo) so the next MoveTo seeds its bezier from where the gesture actually
+// ended, not where the cursor was before it. Backends with OSPositionCSS
+// re-read the real position anyway; this keeps the BiDi backend (no OS cursor)
+// in sync.
+func (c *Cursor) SetPosition(x, y float64) { c.x, c.y = x, y }
+
 // cursorSeeder is implemented by backends that have a real OS cursor — they
 // can report its current position in the backend's CSS coordinate space.
 // Lets MoveTo start the path from where the cursor physically is, not from

@@ -28,18 +28,19 @@ type MouseAPI struct {
 	lastY float64 // last known cursor Y; sentinelPos if never moved
 }
 
-// MoveTo moves the cursor to (x,y) in viewport CSS pixels.
+// MoveTo glides the cursor to (x,y) in viewport CSS pixels along a human-like
+// bezier path (ProfileHuman) via the cursor engine.
 func (m *MouseAPI) MoveTo(x, y float64) error {
-	if err := m.p.inputBackend().MouseMove(m.p.ctx(), x, y); err != nil {
+	if err := m.p.cursorEngine().MoveTo(m.p.ctx(), x, y); err != nil {
 		return err
 	}
 	m.lastX, m.lastY = x, y
 	return nil
 }
 
-// ClickAt clicks at (x,y) with the left button.
+// ClickAt glides to (x,y) then clicks with the left button.
 func (m *MouseAPI) ClickAt(x, y float64) error {
-	if err := m.click(x, y, input.MouseLeft); err != nil {
+	if err := m.clickButton(x, y, input.MouseLeft); err != nil {
 		return err
 	}
 	m.lastX, m.lastY = x, y
@@ -63,30 +64,28 @@ func (m *MouseAPI) RightClick(selector string) error {
 		return err
 	}
 	cx, cy := bb.Center()
-	if err := m.click(cx, cy, input.MouseRight); err != nil {
+	if err := m.clickButton(cx, cy, input.MouseRight); err != nil {
 		return err
 	}
 	m.lastX, m.lastY = cx, cy
 	return nil
 }
 
-// MiddleClick is a Firefox-extra: clicks at (x,y) with the middle button.
+// MiddleClick is a Firefox-extra: glides to (x,y) then clicks the middle button.
 // Not in chromekit MouseAPI but retained as coord-based extra.
 func (m *MouseAPI) MiddleClick(x, y float64) error {
-	if err := m.click(x, y, input.MouseMiddle); err != nil {
+	if err := m.clickButton(x, y, input.MouseMiddle); err != nil {
 		return err
 	}
 	m.lastX, m.lastY = x, y
 	return nil
 }
 
-func (m *MouseAPI) click(x, y float64, button input.MouseButton) error {
-	b := m.p.inputBackend()
-	ctx := m.p.ctx()
-	if err := b.MouseDown(ctx, x, y, button); err != nil {
-		return err
-	}
-	return b.MouseUp(ctx, x, y, button)
+// clickButton routes through the cursor engine: glide to (x,y) along a bezier
+// path, then press/release with a human-like hold. Replaces the old direct
+// backend MouseDown/MouseUp teleport-click so Firefox matches chromekit.
+func (m *MouseAPI) clickButton(x, y float64, button input.MouseButton) error {
+	return m.p.cursorEngine().Click(m.p.ctx(), x, y, button)
 }
 
 // DoubleClick fires two left clicks at the element's center within ~80ms.
@@ -96,13 +95,13 @@ func (m *MouseAPI) DoubleClick(selector string) error {
 		return err
 	}
 	cx, cy := bb.Center()
-	if err := m.click(cx, cy, input.MouseLeft); err != nil {
+	if err := m.clickButton(cx, cy, input.MouseLeft); err != nil {
 		return err
 	}
 	m.lastX, m.lastY = cx, cy
 	// Browsers expect two clicks within ~500ms; insert a small gap.
 	time.Sleep(40 * time.Millisecond)
-	if err := m.click(cx, cy, input.MouseLeft); err != nil {
+	if err := m.clickButton(cx, cy, input.MouseLeft); err != nil {
 		return err
 	}
 	return nil
@@ -139,11 +138,17 @@ func (m *MouseAPI) scrollOrigin() (float64, float64) {
 	return 0, 0
 }
 
-// Drag presses at (fromX,fromY), moves through dragSteps intermediate points,
-// then releases at (toX,toY).
+// Drag glides to (fromX,fromY), presses, moves through dragSteps intermediate
+// points, then releases at (toX,toY). The approach glide makes the gesture
+// human-like; the press-hold-move portion stays on the raw backend because a
+// button must remain held across the intermediate moves.
 func (m *MouseAPI) Drag(fromX, fromY, toX, toY float64) error {
 	b := m.p.inputBackend()
 	ctx := m.p.ctx()
+	// Glide to the grab point before pressing (matches click behavior).
+	if err := m.p.cursorEngine().MoveTo(ctx, fromX, fromY); err != nil {
+		return err
+	}
 	if err := b.MouseDown(ctx, fromX, fromY, input.MouseLeft); err != nil {
 		return err
 	}
@@ -160,6 +165,11 @@ func (m *MouseAPI) Drag(fromX, fromY, toX, toY float64) error {
 		return err
 	}
 	m.lastX, m.lastY = toX, toY
+	// Sync the cursor engine to the drag end-point — the press-hold-move above
+	// bypassed it, so without this the next glide would seed from the drag
+	// source (visible backward jump on the BiDi backend, which has no OS cursor
+	// to re-seed from).
+	m.p.cursorEngine().SetPosition(toX, toY)
 	return b.MouseUp(ctx, toX, toY, input.MouseLeft)
 }
 

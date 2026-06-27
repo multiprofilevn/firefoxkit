@@ -12,3 +12,9 @@ func (b *Browser) Focus(ctx context.Context) error { return ErrNativeNotSupporte
 
 // ContentOffset is Windows-only.
 func (b *Browser) ContentOffset() (int, int, error) { return 0, 0, ErrNativeNotSupported }
+
+// WindowScale is Windows-only.
+func (b *Browser) WindowScale() (float64, error) { return 0, ErrNativeNotSupported }
+
+// SetWindowBounds is Windows-only.
+func (b *Browser) SetWindowBounds(x, y, w, h int) error { return ErrNativeNotSupported }
