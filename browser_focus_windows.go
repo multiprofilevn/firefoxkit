@@ -101,6 +101,21 @@ func findFirefoxHWND(pid uint32) (uintptr, error) {
 	return findHwndOut, nil
 }
 
+// FindHWND returns the top-level Mozilla window owned by pid. For callers on the
+// Connect path (Browser.proc is nil, so HWND() cannot self-resolve) that learned
+// the real browser PID out-of-band and need to wire it via SetHWND before native
+// input. Returns an error if no matching window is found.
+func FindHWND(pid int) (uintptr, error) {
+	hwnd, err := findFirefoxHWND(uint32(pid))
+	if err != nil {
+		return 0, err
+	}
+	if hwnd == 0 {
+		return 0, fmt.Errorf("firefoxkit: no Firefox window found for pid %d", pid)
+	}
+	return hwnd, nil
+}
+
 // Focus brings the Firefox window to the foreground. Restores from minimized
 // state if needed. Required before native input can hit content. The ctx
 // parameter mirrors chromekit's signature; the win32 foreground calls are

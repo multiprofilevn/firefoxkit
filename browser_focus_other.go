@@ -7,6 +7,9 @@ import "context"
 // HWND is Windows-only. Stub returns 0.
 func (b *Browser) HWND() (uintptr, error) { return 0, ErrNativeNotSupported }
 
+// FindHWND is Windows-only.
+func FindHWND(pid int) (uintptr, error) { return 0, ErrNativeNotSupported }
+
 // Focus is Windows-only. The ctx parameter mirrors chromekit's signature.
 func (b *Browser) Focus(ctx context.Context) error { return ErrNativeNotSupported }
 
