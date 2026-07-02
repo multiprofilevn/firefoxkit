@@ -48,14 +48,14 @@ func (d *DownloadsAPI) SetPath(dir string) error {
 
 // Wait blocks until the next download completes, or timeout. Returns the
 // local file path of the completed download.
-func (d *DownloadsAPI) Wait(ctx context.Context, timeout time.Duration) (string, error) {
-	if err := d.ensureSubscribed(ctx); err != nil {
+func (d *DownloadsAPI) Wait(timeout time.Duration) (string, error) {
+	if err := d.ensureSubscribed(d.p.ctx()); err != nil {
 		return "", err
 	}
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	tctx, cancel := context.WithTimeout(ctx, timeout)
+	tctx, cancel := d.p.opCtx(timeout)
 	defer cancel()
 	select {
 	case ev := <-d.p.dl.pending:

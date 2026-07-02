@@ -18,6 +18,7 @@ const MozillaWindowClass = "MozillaWindowClass"
 //   - Tab strip:                ~36 px
 //   - URL toolbar:              ~38 px
 //   - Bookmarks bar (off):      0 px
+//
 // Total Y offset ~104 px. X offset is the window border (~8 px on Win11).
 //
 // These are coarse defaults; callers needing pixel accuracy should pass
@@ -55,4 +56,21 @@ func MeasureContentOffset(hwnd uintptr) (x, y int, err error) {
 	}
 	// pt is now content-area top-left in screen coords; add chrome-area Y.
 	return int(pt.X), int(pt.Y) + DefaultFirefoxContentOffsetY, nil
+}
+
+// MeasureDPIScale returns the per-monitor DPI scale factor for the window
+// (1.0 at 96 DPI, 1.5 at 144 DPI, ...). Used so CSS pixels map to the right
+// number of physical screen pixels under display scaling. Falls back to 1.0
+// when GetDpiForWindow is unavailable (pre-Windows 10 1607) or returns 0.
+func MeasureDPIScale(hwnd uintptr) float64 {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	getDpiForWindow := user32.NewProc("GetDpiForWindow")
+	if err := getDpiForWindow.Find(); err != nil {
+		return 1.0
+	}
+	dpi, _, _ := getDpiForWindow.Call(hwnd)
+	if dpi == 0 {
+		return 1.0
+	}
+	return float64(dpi) / 96.0
 }

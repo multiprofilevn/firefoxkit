@@ -3,7 +3,6 @@
 package firefoxkit_test
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -38,17 +37,15 @@ func TestIntegration_LaunchNavigateScreenshotClose(t *testing.T) {
 		t.Fatal("Current returned nil")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := p.Navigate(ctx, "about:blank"); err != nil {
+	if err := p.Navigate("about:blank", 30*time.Second); err != nil {
 		t.Fatalf("Navigate about:blank: %v", err)
 	}
 
-	if err := p.WaitForReady(ctx, 10*time.Second); err != nil {
+	if err := p.WaitForReady(10 * time.Second); err != nil {
 		t.Fatalf("WaitForReady: %v", err)
 	}
 
+	ctx := p.Ctx()
 	img, err := p.Screenshot(ctx)
 	if err != nil {
 		t.Fatalf("Screenshot: %v", err)
@@ -67,15 +64,13 @@ func TestIntegration_EvaluatePrimitives(t *testing.T) {
 	defer b.Close()
 
 	p := b.Current()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
-	if err := p.Navigate(ctx, "about:blank"); err != nil {
+	if err := p.Navigate("about:blank", 30*time.Second); err != nil {
 		t.Fatalf("Navigate: %v", err)
 	}
 
 	var sum float64
-	if err := p.Evaluate(ctx, "1 + 2", &sum); err != nil {
+	if err := p.Evaluate("1 + 2", &sum); err != nil {
 		t.Fatalf("Evaluate: %v", err)
 	}
 	if sum != 3 {
@@ -86,7 +81,7 @@ func TestIntegration_EvaluatePrimitives(t *testing.T) {
 		A int    `json:"a"`
 		B string `json:"b"`
 	}
-	if err := p.Evaluate(ctx, `({a: 42, b: "hi"})`, &obj); err != nil {
+	if err := p.Evaluate(`({a: 42, b: "hi"})`, &obj); err != nil {
 		t.Fatalf("Evaluate obj: %v", err)
 	}
 	if obj.A != 42 || obj.B != "hi" {
@@ -103,24 +98,32 @@ func TestIntegration_CookieRoundTrip(t *testing.T) {
 	defer b.Close()
 
 	p := b.Current()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	// data: URLs don't accept cookies — use a real-ish origin.
-	if err := p.Navigate(ctx, "https://example.com"); err != nil {
+	if err := p.Navigate("https://example.com", 30*time.Second); err != nil {
 		t.Skipf("Navigate example.com failed (likely offline): %v", err)
 	}
 
-	if err := p.Cookies().Set(ctx, firefoxkit.Cookie{
+	if err := p.Cookies().Set(firefoxkit.Cookie{
 		Name: "ffk_test", Value: "12345", Domain: "example.com", Path: "/",
 	}); err != nil {
 		t.Fatalf("Set cookie: %v", err)
 	}
-	got, err := p.Cookies().Get(ctx, "ffk_test")
+	cookies, err := p.Cookies().Get("https://example.com")
 	if err != nil {
-		t.Fatalf("Get cookie: %v", err)
+		t.Fatalf("Get cookies: %v", err)
 	}
-	if got.Value != "12345" {
-		t.Errorf("cookie value = %q, want 12345", got.Value)
+	var found *firefoxkit.Cookie
+	for i := range cookies {
+		if cookies[i].Name == "ffk_test" {
+			found = &cookies[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("cookie ffk_test not found")
+	}
+	if found.Value != "12345" {
+		t.Errorf("cookie value = %q, want 12345", found.Value)
 	}
 }

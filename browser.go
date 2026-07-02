@@ -22,11 +22,38 @@ type Browser struct {
 	wsURL     string      // ws://127.0.0.1:N/session/<sid>
 	sessionID string
 
+	// baseCtx is the long-lived parent context every public Page/Browser
+	// method derives from. It lets the API hide context.Context from callers
+	// (chromekit parity) while still supporting cancellation: Close() calls
+	// baseCancel to unblock any in-flight operation. Set once by Launch/Connect.
+	baseCtx    context.Context
+	baseCancel context.CancelFunc
+
+	// hwndOverride, when non-zero, is the explicit top-level window handle set
+	// via SetHWND — takes precedence over PID-based lookup in HWND().
+	hwndOverride uintptr
+
 	pagesMu sync.RWMutex
 	pages   []*Page
 	current *Page
 
 	closeOnce sync.Once
+}
+
+// initBaseCtx wires the long-lived base context. Called by Launch/Connect right
+// after the Browser literal is built. Idempotent guard not needed — each
+// Browser is constructed exactly once.
+func (b *Browser) initBaseCtx() {
+	b.baseCtx, b.baseCancel = context.WithCancel(context.Background())
+}
+
+// ctx returns the browser-wide base context. Internal accessor for files that
+// derive per-call contexts without a caller-supplied ctx.
+func (b *Browser) ctx() context.Context {
+	if b == nil || b.baseCtx == nil {
+		return context.Background()
+	}
+	return b.baseCtx
 }
 
 // Current returns the active page (last opened / last switched-to).
@@ -55,11 +82,21 @@ func (b *Browser) InputBackend() BackendType {
 
 // PID returns the Firefox process id when chromekit-style Launch owns the
 // process. 0 on the Connect path.
-func (b *Browser) PID() int {
+func (b *Browser) PID() uint32 {
 	if b == nil || b.proc == nil {
 		return 0
 	}
-	return b.proc.Pid
+	return uint32(b.proc.Pid)
+}
+
+// SetHWND overrides the Firefox top-level window handle used by native input.
+// Useful on the Connect path where PID-based lookup is unavailable. A non-zero
+// override takes precedence over the PID-based search in HWND().
+func (b *Browser) SetHWND(hwnd uintptr) {
+	if b == nil {
+		return
+	}
+	b.hwndOverride = hwnd
 }
 
 // Done returns a channel that closes when the BiDi client disconnects —
@@ -78,6 +115,11 @@ func (b *Browser) Done() <-chan struct{} {
 func (b *Browser) Close() error {
 	var firstErr error
 	b.closeOnce.Do(func() {
+		// Cancel the base context first so any in-flight user operation
+		// derived from it unblocks before we tear down the transport.
+		if b.baseCancel != nil {
+			b.baseCancel()
+		}
 		b.pagesMu.Lock()
 		pages := b.pages
 		b.pages = nil

@@ -1,7 +1,6 @@
 package firefoxkit
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,7 +18,7 @@ import (
 // picker (e.g. opening a dialog with stricter validation) may not observe
 // the synthesized FileList. Use BackendNative + a real OS dialog in those
 // cases — that path lands in a follow-up.
-func (p *Page) SetInputFiles(ctx context.Context, sel string, paths ...string) error {
+func (p *Page) SetInputFiles(sel string, paths ...string) error {
 	type fileBlob struct {
 		Name    string `json:"name"`
 		Type    string `json:"type"`
@@ -61,7 +60,7 @@ func (p *Page) SetInputFiles(ctx context.Context, sel string, paths ...string) e
 		return true;
 	})()`, string(payload), sel)
 	var ok bool
-	if err := p.Evaluate(ctx, expr, &ok); err != nil {
+	if err := p.Evaluate(expr, &ok); err != nil {
 		return err
 	}
 	if !ok {

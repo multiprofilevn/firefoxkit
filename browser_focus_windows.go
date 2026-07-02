@@ -3,6 +3,7 @@
 package firefoxkit
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"syscall"
@@ -20,9 +21,16 @@ var (
 	procShowWindow               = user32.NewProc("ShowWindow")
 	procIsIconic                 = user32.NewProc("IsIconic")
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procSetWindowPos             = user32.NewProc("SetWindowPos")
 )
 
 const swRestore = 9
+
+// SetWindowPos flags: keep Z-order and don't steal focus when repositioning.
+const (
+	swpNoZOrder   = 0x0004
+	swpNoActivate = 0x0010
+)
 
 // Per-process state for findFirefoxHWND. The callback is allocated EXACTLY
 // ONCE via syscall.NewCallback (Go's callback table is a fixed-size slab
@@ -59,10 +67,16 @@ func findHwndCallback(hwnd, _ uintptr) uintptr {
 }
 
 // HWND returns the top-level Mozilla window owned by this Browser's process.
-// Connect-path callers must set b.proc via WithModifyCmd or set foreground by
-// PID themselves — when proc is nil this returns 0.
+// A non-zero override set via SetHWND wins. Otherwise, when proc is nil
+// (Connect path) this returns an error.
 func (b *Browser) HWND() (uintptr, error) {
-	if b == nil || b.proc == nil {
+	if b == nil {
+		return 0, fmt.Errorf("firefoxkit: nil browser")
+	}
+	if b.hwndOverride != 0 {
+		return b.hwndOverride, nil
+	}
+	if b.proc == nil {
 		return 0, fmt.Errorf("firefoxkit: HWND unavailable on Connect path")
 	}
 	return findFirefoxHWND(uint32(b.proc.Pid))
@@ -87,9 +101,29 @@ func findFirefoxHWND(pid uint32) (uintptr, error) {
 	return findHwndOut, nil
 }
 
-// FocusWindow brings the Firefox window to the foreground. Restores from
-// minimized state if needed. Required before native input can hit content.
-func (b *Browser) FocusWindow() error {
+// FindHWND returns the top-level Mozilla window owned by pid. For callers on the
+// Connect path (Browser.proc is nil, so HWND() cannot self-resolve) that learned
+// the real browser PID out-of-band and need to wire it via SetHWND before native
+// input. Returns an error if no matching window is found.
+func FindHWND(pid int) (uintptr, error) {
+	hwnd, err := findFirefoxHWND(uint32(pid))
+	if err != nil {
+		return 0, err
+	}
+	if hwnd == 0 {
+		return 0, fmt.Errorf("firefoxkit: no Firefox window found for pid %d", pid)
+	}
+	return hwnd, nil
+}
+
+// Focus brings the Firefox window to the foreground. Restores from minimized
+// state if needed. Required before native input can hit content. The ctx
+// parameter mirrors chromekit's signature; the win32 foreground calls are
+// synchronous so it is currently only honored for cancellation pre-check.
+func (b *Browser) Focus(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	hwnd, err := b.HWND()
 	if err != nil {
 		return err
@@ -102,6 +136,53 @@ func (b *Browser) FocusWindow() error {
 	}
 	if ret, _, e := procSetForegroundWindow.Call(hwnd); ret == 0 {
 		return fmt.Errorf("SetForegroundWindow: %v", e)
+	}
+	return nil
+}
+
+// ContentOffset returns the (x, y) pixel offset from the Firefox window's
+// top-left to the top-left of the rendered web content — the chrome height
+// plus border. Used to translate page coordinates to screen coordinates for
+// native input.
+func (b *Browser) ContentOffset() (int, int, error) {
+	hwnd, err := b.HWND()
+	if err != nil {
+		return 0, 0, err
+	}
+	return input.MeasureContentOffset(hwnd)
+}
+
+// WindowScale returns the per-monitor DPI scale factor of the Firefox window
+// (1.0 at 96 DPI). Used by the native input backend to map CSS pixels to
+// physical screen pixels under display scaling.
+func (b *Browser) WindowScale() (float64, error) {
+	hwnd, err := b.HWND()
+	if err != nil {
+		return 0, err
+	}
+	return input.MeasureDPIScale(hwnd), nil
+}
+
+// SetWindowBounds positions and sizes the Firefox window in screen pixels.
+// Firefox has no --window-position CLI flag, so native-input callers running
+// multiple profiles use this to tile windows into a non-overlapping grid (a
+// shared OS cursor sends clicks to whichever window sits under the point).
+// Z-order and focus are preserved.
+func (b *Browser) SetWindowBounds(x, y, w, h int) error {
+	hwnd, err := b.HWND()
+	if err != nil {
+		return err
+	}
+	if hwnd == 0 {
+		return fmt.Errorf("firefoxkit: Firefox HWND not found")
+	}
+	ret, _, e := procSetWindowPos.Call(
+		hwnd, 0,
+		uintptr(x), uintptr(y), uintptr(w), uintptr(h),
+		uintptr(swpNoZOrder|swpNoActivate),
+	)
+	if ret == 0 {
+		return fmt.Errorf("SetWindowPos: %v", e)
 	}
 	return nil
 }

@@ -1,11 +1,5 @@
 package firefoxkit
 
-import (
-	"context"
-
-	"github.com/tuwibu/firefoxkit/internal/bidi"
-)
-
 // DialogType enumerates the kinds of dialogs Firefox emits via BiDi.
 type DialogType string
 
@@ -16,32 +10,18 @@ const (
 	DialogBeforeUnload DialogType = "beforeunload"
 )
 
-// Dialog represents an open user prompt. The handler must call Accept or
-// Dismiss to release it; otherwise the page hangs until the BiDi timeout.
-type Dialog struct {
-	page         *Page
-	contextID    string
-	Type         DialogType
-	Message      string
-	DefaultValue string
+// DialogEvent describes a JS dialog the page just opened. Passed to the
+// handler registered via Page.OnDialog. Matches chromekit's DialogEvent shape.
+type DialogEvent struct {
+	Type          DialogType
+	Message       string
+	DefaultPrompt string // only meaningful for DialogPrompt
 }
 
-// Accept confirms the dialog. text is filled into prompt() inputs; ignored
-// for other dialog types.
-func (d *Dialog) Accept(ctx context.Context, text string) error {
-	accept := true
-	return d.page.browser.client.HandleUserPrompt(ctx, bidi.HandleUserPromptParams{
-		Context:  d.contextID,
-		Accept:   &accept,
-		UserText: text,
-	})
-}
-
-// Dismiss cancels the dialog.
-func (d *Dialog) Dismiss(ctx context.Context) error {
-	dismiss := false
-	return d.page.browser.client.HandleUserPrompt(ctx, bidi.HandleUserPromptParams{
-		Context: d.contextID,
-		Accept:  &dismiss,
-	})
+// DialogAction tells firefoxkit how to respond to the dialog. The zero value
+// (Accept=false) dismisses/cancels the dialog. Matches chromekit's DialogAction
+// shape exactly.
+type DialogAction struct {
+	Accept     bool
+	PromptText string // only used when Accept=true on a prompt dialog
 }

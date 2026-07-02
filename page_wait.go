@@ -21,15 +21,16 @@ func pollBackoff(prev time.Duration) time.Duration {
 
 // pollUntil runs check until it returns (true, nil), errors, or the deadline.
 // Returns ErrTimeout on deadline, ctx.Err() on cancel, check's error otherwise.
+// timeout <= 0 means no deadline — cancellation comes from ctx (e.g. Browser.Close).
 func pollUntil(ctx context.Context, timeout time.Duration, check func(context.Context) (bool, error)) error {
-	deadline := time.Now().Add(timeout)
-	if timeout <= 0 {
-		deadline = time.Now().Add(30 * time.Second)
+	var deadline time.Time
+	if timeout > 0 {
+		deadline = time.Now().Add(timeout)
 	}
 	var wait time.Duration
 	for {
 		// Tight time check first so a slow check() can't extend past deadline.
-		if time.Now().After(deadline) {
+		if !deadline.IsZero() && time.Now().After(deadline) {
 			return ErrTimeout
 		}
 		// Per-attempt sub-context: don't let a hung check block forever.
@@ -59,10 +60,13 @@ func pollUntil(ctx context.Context, timeout time.Duration, check func(context.Co
 }
 
 // WaitForReady blocks until document.readyState === "complete".
-func (p *Page) WaitForReady(ctx context.Context, timeout time.Duration) error {
+// timeout <= 0 means no deadline.
+func (p *Page) WaitForReady(timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
 	return pollUntil(ctx, timeout, func(c context.Context) (bool, error) {
 		var ready string
-		if err := p.Evaluate(c, `document.readyState`, &ready); err != nil {
+		if err := p.evaluateCtx(c, `document.readyState`, &ready); err != nil {
 			return false, err
 		}
 		return ready == "complete", nil
@@ -70,25 +74,52 @@ func (p *Page) WaitForReady(ctx context.Context, timeout time.Duration) error {
 }
 
 // WaitForSelector blocks until document.querySelector(sel) finds a match.
-func (p *Page) WaitForSelector(ctx context.Context, sel string, timeout time.Duration) error {
+// timeout <= 0 means no deadline.
+func (p *Page) WaitForSelector(selector string, timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
 	return pollUntil(ctx, timeout, func(c context.Context) (bool, error) {
-		expr := fmt.Sprintf(`!!document.querySelector(%q)`, sel)
+		expr := fmt.Sprintf(`!!document.querySelector(%q)`, selector)
 		var ok bool
-		if err := p.Evaluate(c, expr, &ok); err != nil {
+		if err := p.evaluateCtx(c, expr, &ok); err != nil {
 			return false, err
 		}
 		return ok, nil
 	})
 }
 
-// WaitForChangeURL blocks until window.location.href differs from prevURL.
-func (p *Page) WaitForChangeURL(ctx context.Context, prevURL string, timeout time.Duration) error {
+// WaitForSelectorGone blocks until document.querySelector(sel) returns null.
+// timeout <= 0 means no deadline.
+func (p *Page) WaitForSelectorGone(selector string, timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
 	return pollUntil(ctx, timeout, func(c context.Context) (bool, error) {
-		var url string
-		if err := p.Evaluate(c, `window.location.href`, &url); err != nil {
+		expr := fmt.Sprintf(`!document.querySelector(%q)`, selector)
+		var gone bool
+		if err := p.evaluateCtx(c, expr, &gone); err != nil {
 			return false, err
 		}
-		if url != prevURL {
+		return gone, nil
+	})
+}
+
+// WaitForChangeURL blocks until window.location.href differs from the cached
+// p.url at call time. The baseline URL is read from p.url (set by Navigate
+// and navigation events) — no prevURL argument needed (chromekit parity).
+// timeout <= 0 means no deadline.
+func (p *Page) WaitForChangeURL(timeout time.Duration) error {
+	p.mu.RLock()
+	baseline := p.url
+	p.mu.RUnlock()
+
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
+	return pollUntil(ctx, timeout, func(c context.Context) (bool, error) {
+		var url string
+		if err := p.evaluateCtx(c, `window.location.href`, &url); err != nil {
+			return false, err
+		}
+		if url != baseline {
 			p.mu.Lock()
 			p.url = url
 			p.mu.Unlock()
@@ -99,10 +130,13 @@ func (p *Page) WaitForChangeURL(ctx context.Context, prevURL string, timeout tim
 }
 
 // WaitForFunction blocks until expression evaluates to a truthy value.
-func (p *Page) WaitForFunction(ctx context.Context, expression string, timeout time.Duration) error {
+// timeout <= 0 means no deadline.
+func (p *Page) WaitForFunction(expr string, timeout time.Duration) error {
+	ctx, cancel := p.opCtx(timeout)
+	defer cancel()
 	return pollUntil(ctx, timeout, func(c context.Context) (bool, error) {
 		var ok bool
-		if err := p.Evaluate(c, fmt.Sprintf(`!!(%s)`, expression), &ok); err != nil {
+		if err := p.evaluateCtx(c, fmt.Sprintf(`!!(%s)`, expr), &ok); err != nil {
 			return false, err
 		}
 		return ok, nil

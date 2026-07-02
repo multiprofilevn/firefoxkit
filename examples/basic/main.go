@@ -31,23 +31,18 @@ func main() {
 
 	p := b.Current()
 
-	navCtx, navCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	if err := p.Navigate(navCtx, *target); err != nil {
-		navCancel()
+	if err := p.Navigate(*target, 30*time.Second); err != nil {
 		log.Fatalf("Navigate: %v", err)
 	}
-	navCancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := p.WaitForReady(ctx, 10*time.Second); err != nil {
+	if err := p.WaitForReady(10 * time.Second); err != nil {
 		log.Printf("WaitForReady: %v (continuing)", err)
 	}
 
-	title, _ := p.TitleLive(ctx)
+	title, _ := p.TitleLive(context.Background())
 	log.Printf("title: %q", title)
 
-	img, err := p.Screenshot(ctx)
+	img, err := p.Screenshot()
 	if err != nil {
 		log.Fatalf("Screenshot: %v", err)
 	}
