@@ -275,6 +275,19 @@ func buildFirefoxArgs(profileDir string, port int, cfg *config) []string {
 // endpoint opens. Format: "WebDriver BiDi listening on ws://127.0.0.1:NNNN"
 var bidiListenRegex = regexp.MustCompile(`WebDriver BiDi listening on (ws://[^\s]+)`)
 
+// bidiSessionURL normalizes the base URL Firefox prints ("ws://host:port",
+// no path) to the actual BiDi WebSocket endpoint ("ws://host:port/session").
+// Dialing the bare base returns HTTP 200 (not a WS upgrade); the "/session"
+// path is what performs the WebSocket handshake. Idempotent — leaves an URL
+// that already ends in "/session" untouched.
+func bidiSessionURL(raw string) string {
+	u := strings.TrimRight(raw, "/")
+	if strings.HasSuffix(u, "/session") {
+		return u
+	}
+	return u + "/session"
+}
+
 // discoverBiDiURL races two strategies: stderr regex scan + HTTP probe at
 // http://127.0.0.1:port/session/new. Returns the WS URL of the first
 // strategy to succeed.
@@ -302,7 +315,7 @@ func discoverBiDiURL(ctx context.Context, port int, stderr io.ReadCloser, logger
 			mu.Unlock()
 			if m := bidiListenRegex.FindStringSubmatch(line); len(m) == 2 {
 				select {
-				case results <- result{url: m[1]}:
+				case results <- result{url: bidiSessionURL(m[1])}:
 				case <-ctx.Done():
 				}
 				// Keep draining so the stderr pipe never blocks Firefox.
