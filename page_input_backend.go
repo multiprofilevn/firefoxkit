@@ -2,6 +2,7 @@ package firefoxkit
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/tuwibu/firefoxkit/input"
 )
@@ -9,6 +10,9 @@ import (
 type backendCache struct {
 	once sync.Once
 	bk   input.Backend
+	// ready flips true once bk is initialized — lets cleanup() release input
+	// state without forcing construction of a backend that was never used.
+	ready atomic.Bool
 }
 
 // inputBackend returns the input.Backend bound to this page. Lazy-initialized.
@@ -17,15 +21,15 @@ type backendCache struct {
 // input.MeasureContentOffset on Windows).
 func (p *Page) inputBackend() input.Backend {
 	p.bkCache.once.Do(func() {
-		if p.bkCache.bk != nil {
-			return // pre-set by tests (fake backend injection)
+		if p.bkCache.bk == nil { // may be pre-set by tests (fake backend injection)
+			switch p.browser.cfg.inputBackend {
+			case BackendNative:
+				p.bkCache.bk = input.NewNative(input.Config{Window: p.nativeWindow()})
+			default:
+				p.bkCache.bk = input.NewBiDi(p.browser.client, p.contextID)
+			}
 		}
-		switch p.browser.cfg.inputBackend {
-		case BackendNative:
-			p.bkCache.bk = input.NewNative(input.Config{Window: p.nativeWindow()})
-		default:
-			p.bkCache.bk = input.NewBiDi(p.browser.client, p.contextID)
-		}
+		p.bkCache.ready.Store(true)
 	})
 	return p.bkCache.bk
 }

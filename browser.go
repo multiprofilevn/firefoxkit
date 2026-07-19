@@ -22,6 +22,11 @@ type Browser struct {
 	wsURL     string      // ws://127.0.0.1:N/session/<sid>
 	sessionID string
 
+	// cleanupProfile removes the firefoxkit-created temp profile dir. Nil (or
+	// no-op) for Connect and user-supplied profiles. Invoked by Close() after
+	// the Firefox process has been reaped so files are no longer locked.
+	cleanupProfile func()
+
 	// baseCtx is the long-lived parent context every public Page/Browser
 	// method derives from. It lets the API hide context.Context from callers
 	// (chromekit parity) while still supporting cancellation: Close() calls
@@ -144,6 +149,9 @@ func (b *Browser) Close() error {
 				firstErr = fmt.Errorf("kill firefox pid=%d: %w", b.proc.Pid, err)
 			}
 			_, _ = b.proc.Wait()
+		}
+		if b.cleanupProfile != nil {
+			b.cleanupProfile()
 		}
 	})
 	return firstErr

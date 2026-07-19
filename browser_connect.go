@@ -66,5 +66,9 @@ func Connect(port int, opts ...Option) (*Browser, error) {
 		_ = b.Close()
 		return nil, err
 	}
+	if err := b.watchContextLifecycle(ctx); err != nil && cfg.logger != nil {
+		// Degraded but usable: self-closed tabs won't be pruned automatically.
+		cfg.logger.Warnf("firefoxkit: contextDestroyed subscribe: %v", err)
+	}
 	return b, nil
 }

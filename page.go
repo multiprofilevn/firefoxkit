@@ -35,28 +35,39 @@ type Page struct {
 	mouseOnce sync.Once
 	mouse     *MouseAPI
 
-	hdrOnce sync.Once
-	hdr     *headerInjector
-
-	dlOnce sync.Once
+	// initMu guards lazy construction of hdr and dl. A plain mutex (not
+	// sync.Once) so cleanup() can read the fields race-free even when it runs
+	// concurrently with a first-use initialization.
+	initMu sync.Mutex
+	hdr    *headerInjector
 	dl     *downloadsAPI
 
-	// dialogOnce ensures we subscribe to userPromptOpened at most once.
+	// listenerMu guards the *Subscribed flags below. A plain mutex+bool (not
+	// sync.Once) so a failed session.subscribe can be retried on a later call —
+	// resetting a sync.Once inside Do() fatals with "unlock of unlocked mutex".
+	// The flag is set only after the subscribe RPC succeeds.
+	listenerMu        sync.Mutex
+	dialogSubscribed  bool
+	consoleSubscribed bool
+
 	// dialogHandler holds the current handler (replaced on each OnDialog call).
-	dialogOnce    sync.Once
 	dialogHandler atomic.Pointer[func(DialogEvent) DialogAction]
 
-	// consoleOnce ensures we subscribe to log.entryAdded at most once.
 	// consoleHandler holds the current handler (replaced on each OnConsole call).
-	consoleOnce    sync.Once
 	consoleHandler atomic.Pointer[func(ConsoleEvent)]
 
-	// subsMu guards subs — the cumulative list of BiDi event subscriptions
-	// registered for this page (header injector, downloads, OnDialog,
-	// OnConsole). cleanup() walks the list on Browser.ClosePage so we don't
-	// leak handlers + server-side intercept ids after the tab is gone.
-	subsMu sync.Mutex
-	subs   []*bidi.Subscription
+	// subsMu guards subs and serverEvents. subs is the cumulative list of
+	// local BiDi event subscriptions registered for this page (header
+	// injector, downloads, OnDialog, OnConsole); serverEvents the per-context
+	// event names session.subscribe'd for it. cleanup() releases both so we
+	// don't leak handlers + server-side subscriptions after the tab is gone.
+	subsMu       sync.Mutex
+	subs         []*bidi.Subscription
+	serverEvents []string
+
+	// cleanedUp makes cleanup idempotent — it can be reached from both the
+	// contextDestroyed listener and Browser.Close/ClosePage.
+	cleanedUp atomic.Bool
 }
 
 // trackSub appends a subscription to the per-page list so cleanup() can
@@ -71,34 +82,85 @@ func (p *Page) trackSub(s *bidi.Subscription) *bidi.Subscription {
 	return s
 }
 
+// trackServerEvent records a per-context event name that was successfully
+// session.subscribe'd for this page, so cleanup can session.unsubscribe it.
+func (p *Page) trackServerEvent(event string) {
+	p.subsMu.Lock()
+	p.serverEvents = append(p.serverEvents, event)
+	p.subsMu.Unlock()
+}
+
 // cleanup unsubscribes every per-page BiDi event handler and releases any
-// server-side intercept ids. Idempotent. Called from Browser.ClosePage and
-// Browser.Close. Failures during cleanup are logged but never returned —
-// teardown must be best-effort to avoid wedging on partial state.
+// server-side intercept ids + event subscriptions. Idempotent — reached from
+// the contextDestroyed listener, Browser.ClosePage, and Browser.Close.
+// Failures during cleanup are logged but never returned — teardown must be
+// best-effort to avoid wedging on partial state.
 func (p *Page) cleanup(ctx context.Context) {
-	// Header injector + intercept id.
-	if p.hdr != nil {
+	// Set cleanedUp BEFORE acquiring the per-feature serialization locks below.
+	// Combined with each lazy-subscribe path checking cleanedUp under the same
+	// lock, this guarantees: a subscribe already committed under its lock is
+	// seen here (we take the same lock), and a subscribe starting after this
+	// Swap bails out — so no subscription is ever orphaned by a cleanup/first-
+	// subscribe race.
+	if p.cleanedUp.Swap(true) {
+		return
+	}
+	p.initMu.Lock()
+	hdr := p.hdr
+	dl := p.dl
+	p.initMu.Unlock()
+	// Header injector + intercept id — take installMu so an in-flight
+	// installHeaderInterceptor finishes (and is removed) rather than being
+	// orphaned by a no-op remove seeing an empty interceptID.
+	if hdr != nil {
+		hdr.installMu.Lock()
 		if err := p.removeHeaderInterceptor(ctx); err != nil && p.log != nil {
 			p.log.Warnf("firefoxkit: cleanup header injector: %v", err)
 		}
+		hdr.installMu.Unlock()
 	}
-	// Downloads subscription.
-	if p.dl != nil {
-		p.dl.mu.Lock()
-		sub := p.dl.sub
-		p.dl.sub = nil
-		p.dl.mu.Unlock()
+	// Downloads subscription — dl.mu is the same lock ensureSubscribed holds.
+	if dl != nil {
+		dl.mu.Lock()
+		sub := dl.sub
+		dl.sub = nil
+		dl.mu.Unlock()
 		if sub != nil {
 			sub.Unsubscribe()
 		}
 	}
-	// Tracked listener subscriptions (OnDialog / OnConsole).
+	// Release any held keys / pressed buttons so a Down without its Up (error
+	// or cancel mid-sequence) can't leave sticky modifiers in the context.
+	if p.bkCache.ready.Load() {
+		if r, ok := p.bkCache.bk.(interface{ Release(context.Context) error }); ok {
+			if err := r.Release(ctx); err != nil && p.log != nil {
+				p.log.Debugf("firefoxkit: cleanup release input: %v", err)
+			}
+		}
+	}
+	// Tracked listener subscriptions (OnDialog / OnConsole). Hold listenerMu
+	// so an in-flight first OnDialog/OnConsole completes its trackSub before
+	// we snapshot (and any later one sees cleanedUp and bails).
+	p.listenerMu.Lock()
 	p.subsMu.Lock()
 	subs := p.subs
 	p.subs = nil
+	events := p.serverEvents
+	p.serverEvents = nil
 	p.subsMu.Unlock()
+	p.listenerMu.Unlock()
 	for _, s := range subs {
 		s.Unsubscribe()
+	}
+	// Server-side unsubscribe so per-context subscriptions don't pile up on
+	// the session across page churn. Fails harmlessly for destroyed contexts.
+	if len(events) > 0 {
+		if err := p.browser.client.UnsubscribeEvents(ctx, bidi.SubscribeParams{
+			Events:   events,
+			Contexts: []string{p.contextID},
+		}); err != nil && p.log != nil {
+			p.log.Debugf("firefoxkit: cleanup unsubscribe %v: %v", events, err)
+		}
 	}
 }
 

@@ -37,6 +37,15 @@ func dial(ctx context.Context, url string, httpClient *http.Client) (*wsTranspor
 	return &wsTransport{conn: conn}, nil
 }
 
+// writeJSON marshals v and writes it as one text frame.
+//
+// Known behavior (coder/websocket): if ctx is cancelled midway through a Write,
+// the library closes the whole connection — not just this write. So a single
+// Send with a very short deadline carrying a large payload (long script,
+// continueRequest body, base64 upload) can tear down the session on a heavily
+// loaded machine, failing every other in-flight call with ErrClientClosed.
+// Rare on localhost; give large-payload calls a generous timeout. Not worked
+// around here on purpose (measured in the leak-test suite first).
 func (t *wsTransport) writeJSON(ctx context.Context, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {

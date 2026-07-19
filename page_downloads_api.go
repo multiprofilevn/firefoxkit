@@ -24,11 +24,14 @@ type downloadEndPayload struct {
 	Status string
 }
 
-// Downloads returns the per-Page download namespace.
+// Downloads returns the per-Page download namespace. Lazy-init under initMu
+// (race-free vs. cleanup).
 func (p *Page) Downloads() *DownloadsAPI {
-	p.dlOnce.Do(func() {
+	p.initMu.Lock()
+	if p.dl == nil {
 		p.dl = &downloadsAPI{pending: make(chan downloadEndPayload, 8)}
-	})
+	}
+	p.initMu.Unlock()
 	return &DownloadsAPI{p: p}
 }
 
@@ -74,6 +77,9 @@ func (d *DownloadsAPI) Wait(timeout time.Duration) (string, error) {
 func (d *DownloadsAPI) ensureSubscribed(ctx context.Context) error {
 	d.p.dl.mu.Lock()
 	defer d.p.dl.mu.Unlock()
+	if d.p.cleanedUp.Load() {
+		return nil // page torn down — don't register an orphan subscription
+	}
 	if d.p.dl.sub != nil {
 		return nil
 	}
@@ -83,6 +89,7 @@ func (d *DownloadsAPI) ensureSubscribed(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+	d.p.trackServerEvent("browsingContext.downloadEnd")
 	d.p.dl.sub = d.p.browser.client.Subscribe("browsingContext.downloadEnd", func(params json.RawMessage) {
 		var ev bidi.DownloadEndEvent
 		if err := json.Unmarshal(params, &ev); err != nil {

@@ -16,27 +16,50 @@ type headerInjector struct {
 	headers     map[string]string
 	interceptID string
 	sub         *bidi.Subscription
+
+	// installMu serializes install/remove of the interceptor. Without it two
+	// concurrent SetExtraHeaders calls could both see interceptID == "" and
+	// install twice — the loser's intercept + handler would be orphaned and
+	// keep injecting headers even after SetExtraHeaders(nil).
+	installMu sync.Mutex
+}
+
+// headerInjectorLazy returns the per-page injector, constructing it on first
+// use under initMu (race-free vs. cleanup).
+func (p *Page) headerInjectorLazy() *headerInjector {
+	p.initMu.Lock()
+	defer p.initMu.Unlock()
+	if p.hdr == nil {
+		p.hdr = &headerInjector{headers: map[string]string{}}
+	}
+	return p.hdr
 }
 
 // SetExtraHeaders merges headers into every subsequent request from this page.
 // Passing an empty map removes the injector. Idempotent; later calls replace
 // the active set rather than accumulating.
 func (p *Page) SetExtraHeaders(headers map[string]string) error {
-	p.hdrOnce.Do(func() { p.hdr = &headerInjector{headers: map[string]string{}} })
-	hi := p.hdr
+	hi := p.headerInjectorLazy()
 
 	hi.mu.Lock()
 	hi.headers = make(map[string]string, len(headers))
 	for k, v := range headers {
 		hi.headers[k] = v
 	}
-	needInstall := hi.interceptID == ""
 	hi.mu.Unlock()
 
+	hi.installMu.Lock()
+	defer hi.installMu.Unlock()
+	if p.cleanedUp.Load() {
+		return nil // page torn down — don't install an orphan interceptor
+	}
 	if len(headers) == 0 {
 		return p.removeHeaderInterceptor(p.ctx())
 	}
-	if !needInstall {
+	hi.mu.RLock()
+	installed := hi.interceptID != ""
+	hi.mu.RUnlock()
+	if installed {
 		return nil
 	}
 	return p.installHeaderInterceptor(p.ctx())
@@ -57,6 +80,7 @@ func (p *Page) installHeaderInterceptor(ctx context.Context) error {
 		_ = p.browser.client.RemoveIntercept(ctx, bidi.RemoveInterceptParams{Intercept: res.Intercept})
 		return err
 	}
+	p.trackServerEvent("network.beforeRequestSent")
 	sub := p.browser.client.Subscribe("network.beforeRequestSent", func(params json.RawMessage) {
 		var ev bidi.BeforeRequestSentEvent
 		if err := json.Unmarshal(params, &ev); err != nil {
@@ -86,21 +110,18 @@ func (p *Page) installHeaderInterceptor(ctx context.Context) error {
 		}
 		p.hdr.mu.RUnlock()
 
-		// Dispatch ContinueRequest in a goroutine — the BiDi event-bus
-		// dispatcher runs handlers synchronously on the reader goroutine,
-		// so a synchronous RPC here would serialize EVERY subsequent event
-		// (downloads, dialogs, console) behind this one network call.
-		req := ev.Request.Request
-		go func() {
-			cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := p.browser.client.ContinueRequest(cctx, bidi.ContinueRequestParams{
-				Request: req,
-				Headers: hdrs,
-			}); err != nil && p.log != nil {
-				p.log.Debugf("firefoxkit: continueRequest: %v", err)
-			}
-		}()
+		// Runs on this subscription's worker — safe to issue the RPC
+		// synchronously. Only network.beforeRequestSent events queue behind
+		// it; other subscriptions (downloads, dialogs, console) have their
+		// own workers. No goroutine-per-request under load.
+		cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := p.browser.client.ContinueRequest(cctx, bidi.ContinueRequestParams{
+			Request: ev.Request.Request,
+			Headers: hdrs,
+		}); err != nil && p.log != nil {
+			p.log.Debugf("firefoxkit: continueRequest: %v", err)
+		}
 	})
 	p.hdr.mu.Lock()
 	p.hdr.interceptID = res.Intercept

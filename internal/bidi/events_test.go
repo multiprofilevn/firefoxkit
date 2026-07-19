@@ -19,7 +19,8 @@ func TestEventBus_SubscribeDispatch(t *testing.T) {
 	bus.dispatch("foo", nil)
 	bus.dispatch("bar", nil) // unrelated, ignored
 
-	if got.Load() != 2 {
+	// Delivery is async (per-subscription worker) — poll.
+	if !pollUntil(t, time.Second, func() bool { return got.Load() == 2 }) {
 		t.Fatalf("handler invoked %d times, want 2", got.Load())
 	}
 }
@@ -30,10 +31,15 @@ func TestEventBus_Unsubscribe(t *testing.T) {
 	sub := bus.subscribe("foo", func(json.RawMessage) { got.Add(1) })
 
 	bus.dispatch("foo", nil)
+	// Queued events are still delivered on unsubscribe; wait for the first.
+	if !pollUntil(t, time.Second, func() bool { return got.Load() == 1 }) {
+		t.Fatalf("first event not delivered, got %d", got.Load())
+	}
 	sub.Unsubscribe()
 	bus.dispatch("foo", nil)
 	sub.Unsubscribe() // idempotent
 
+	time.Sleep(50 * time.Millisecond) // grace: a post-unsubscribe delivery would land here
 	if got.Load() != 1 {
 		t.Fatalf("handler invoked %d times after unsubscribe, want 1", got.Load())
 	}
@@ -48,7 +54,7 @@ func TestEventBus_MultipleHandlers(t *testing.T) {
 	defer subB.Unsubscribe()
 
 	bus.dispatch("foo", nil)
-	if a.Load() != 1 || b.Load() != 1 {
+	if !pollUntil(t, time.Second, func() bool { return a.Load() == 1 && b.Load() == 1 }) {
 		t.Fatalf("a=%d b=%d, want both 1", a.Load(), b.Load())
 	}
 }
@@ -62,7 +68,7 @@ func TestEventBus_HandlerPanicRecovered(t *testing.T) {
 	// Must not propagate.
 	bus.dispatch("foo", nil)
 
-	if logger.warnCount() == 0 {
+	if !pollUntil(t, time.Second, func() bool { return logger.warnCount() > 0 }) {
 		t.Fatal("expected warn log for handler panic")
 	}
 }

@@ -87,3 +87,62 @@ What violates the rule: `func (p *Page) Navigate(url string, timeout time.Durati
 Same as Launch but skips steps 1-5: assumes Firefox already listening on
 the user-supplied port. `Close()` does NOT terminate the Firefox process
 (b.closeProc == false).
+
+## Event dispatch (bounded per-subscription workers)
+
+`internal/bidi` delivers events off the reader goroutine: each `Subscribe`
+owns a bounded queue (cap 256) drained by one worker. Consequences:
+
+- Handlers **may** call back into firefoxkit RPCs — they no longer run on the
+  reader, so a handler that issues `Send` can't deadlock the client.
+- A slow handler only delays (or, past the cap, drops with a throttled warn)
+  events of **its own** subscription. Other subscriptions are unaffected.
+- Ordering is preserved per subscription (single worker), not across
+  subscriptions.
+- `Close()` blocks until the reader has exited and every worker has drained,
+  so no handler runs after `Close()` returns.
+- **Avoid calling `Browser.Close()`/`Page.Close()` from inside an event
+  handler.** A handler runs on its subscription's worker, and `Close` waits
+  for workers to drain — so a handler that closes the client waits on itself.
+  This is now bounded (Close proceeds after a 5s drain timeout with a warn log
+  instead of hanging), but the clean pattern is `go browser.Close()`.
+
+## Long-running / leak safety
+
+Fixes that keep a long-lived automation process flat (plan 260719-1620):
+
+- `browsingContext.contextDestroyed` is subscribed once per Browser: tabs
+  Firefox closes itself (self-closing popups, `window.close()`) are pruned
+  from `b.pages` and cleaned up.
+- `Page.cleanup` is idempotent and also `session.unsubscribe`s the per-context
+  events it registered, and issues `input.releaseActions` to clear any held
+  modifier keys.
+- `QuerySelectorAll`/`QuerySelector` disown the ownership=root handles they
+  create so Firefox doesn't pin result objects forever.
+- Temp profile dirs are removed by `Browser.Close` (not just on the Launch
+  error path).
+- Mouse paths on the BiDi backend are batched into few `input.performActions`
+  calls (`PathBatcher.MousePath`) instead of one RPC per point, avoiding the
+  WebSocket congestion that stalls the cursor under fleet load.
+
+## Known behavior: ctx-cancel during a WebSocket write
+
+`coder/websocket` closes the **whole** connection if a `conn.Write` is
+interrupted by ctx cancellation. So a `Send` with a very short deadline
+carrying a large payload can tear down the session on a loaded machine. Give
+large-payload calls a generous timeout. Documented, not worked around (see
+`internal/bidi/transport.go`).
+
+## Stress / leak-test suite
+
+`integration_stress_test.go` (build tag `stress`) verifies the leak fixes
+against a real Firefox 129+. Not part of the default `go test`. Run manually:
+
+```
+FIREFOXKIT_FIREFOX_PATH=/path/to/firefox go test -tags stress -race -run Stress -v -timeout 20m
+```
+
+Covers: goroutine leak on Launch/Close churn, Firefox-side RSS after 1000
+`QuerySelectorAll` calls, tab-churn page pruning, console-flood goroutine
+bound, and temp-profile-dir cleanup. Each test skips when
+`FIREFOXKIT_FIREFOX_PATH` is unset.

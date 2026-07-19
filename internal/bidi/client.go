@@ -41,9 +41,10 @@ type Client struct {
 	mu      sync.Mutex
 	pending map[int]chan *frame
 
-	closeOnce sync.Once
-	closed    chan struct{}
-	closeErr  error // captured cause for diagnostics; pending get ErrClientClosed
+	shutdownOnce sync.Once // closes closed + tears down transport
+	finishOnce   sync.Once // drains pending + stops event workers
+	closed       chan struct{}
+	readerDone   chan struct{} // closed when readLoop actually returns
 }
 
 // Options for Dial.
@@ -68,11 +69,12 @@ func newClient(t transport, logger Logger) *Client {
 		logger = noopLogger{}
 	}
 	c := &Client{
-		t:       t,
-		logger:  logger,
-		events:  newEventBus(logger),
-		pending: make(map[int]chan *frame),
-		closed:  make(chan struct{}),
+		t:          t,
+		logger:     logger,
+		events:     newEventBus(logger),
+		pending:    make(map[int]chan *frame),
+		closed:     make(chan struct{}),
+		readerDone: make(chan struct{}),
 	}
 	go c.readLoop()
 	return c
@@ -122,6 +124,11 @@ func (c *Client) Send(ctx context.Context, method string, params, out any) error
 		}
 		return nil
 	case <-ctx.Done():
+		// Wrap so callers can errors.Is(err, ErrCommandTimeout) while still
+		// matching the underlying context cause via Unwrap.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("%w: %s: %w", ErrCommandTimeout, method, ctx.Err())
+		}
 		return ctx.Err()
 	case <-c.closed:
 		return ErrClientClosed
@@ -136,15 +143,36 @@ func (c *Client) Subscribe(method string, h Handler) *Subscription {
 }
 
 // Close cancels all in-flight commands and shuts the reader down. Safe to
-// call multiple times.
+// call multiple times. Blocks until the reader goroutine has exited and every
+// event worker has drained, so no handler runs after Close() returns.
 func (c *Client) Close() error {
-	var firstErr error
-	c.closeOnce.Do(func() {
+	err := c.shutdown(websocket.StatusNormalClosure, "client close")
+	// The transport close above unblocks the reader's blocking Read; wait for
+	// it to actually return before finishing teardown.
+	<-c.readerDone
+	c.finish()
+	return err
+}
+
+// shutdown closes the done channel and tears down the transport exactly once.
+// Called by both Close() and the reader's fatal-exit path.
+func (c *Client) shutdown(code websocket.StatusCode, reason string) error {
+	var err error
+	c.shutdownOnce.Do(func() {
 		close(c.closed)
-		firstErr = c.t.close(websocket.StatusNormalClosure, "client close")
-		c.drainPending()
+		err = c.t.close(code, reason)
 	})
-	return firstErr
+	return err
+}
+
+// finish drains pending callers and stops event workers exactly once. Drain
+// runs BEFORE stopping workers so a handler blocked in Send gets
+// ErrClientClosed immediately instead of deadlocking closeAll's Wait.
+func (c *Client) finish() {
+	c.finishOnce.Do(func() {
+		c.drainPending()
+		c.events.closeAll()
+	})
 }
 
 // Done returns a channel closed when the client shuts down (Close or reader
@@ -154,13 +182,12 @@ func (c *Client) Done() <-chan struct{} { return c.closed }
 // readLoop is the single reader. Dispatches by frame shape.
 func (c *Client) readLoop() {
 	defer func() {
-		// Reader exit always implies client is dead — make sure pending
-		// callers and Done() observers see it.
-		c.closeOnce.Do(func() {
-			close(c.closed)
-			_ = c.t.close(websocket.StatusInternalError, "reader exit")
-			c.drainPending()
-		})
+		// Reader exit always implies the client is dead. Mark shutdown (no-op
+		// if Close initiated it), signal our exit so a waiting Close unblocks,
+		// then finish teardown (no-op if Close already ran it).
+		_ = c.shutdown(websocket.StatusInternalError, "reader exit")
+		close(c.readerDone)
+		c.finish()
 	}()
 
 	ctx := context.Background()
@@ -175,7 +202,6 @@ func (c *Client) readLoop() {
 		var f frame
 		if err := c.t.readJSON(ctx, &f); err != nil {
 			if !errors.Is(err, context.Canceled) {
-				c.closeErr = err
 				c.logger.Debugf("bidi: reader exit: %v", err)
 			}
 			return

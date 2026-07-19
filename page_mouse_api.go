@@ -1,6 +1,7 @@
 package firefoxkit
 
 import (
+	"sync"
 	"time"
 
 	"github.com/tuwibu/firefoxkit/input"
@@ -21,11 +22,21 @@ func (p *Page) Mouse() *MouseAPI {
 
 // MouseAPI groups mouse-input shortcuts — both raw-coordinate (low-level) and
 // selector-based variants. Mirrors chromekit MouseAPI public surface exactly,
-// plus extra Firefox-specific MiddleClick.
+// plus extra Firefox-specific MiddleClick. Safe for concurrent use: position
+// state is mutex-guarded and gesture paths serialize on the cursor engine.
 type MouseAPI struct {
-	p     *Page
+	p *Page
+
+	posMu sync.Mutex
 	lastX float64 // last known cursor X; sentinelPos if never moved
 	lastY float64 // last known cursor Y; sentinelPos if never moved
+}
+
+// setLast records the cursor position under lock.
+func (m *MouseAPI) setLast(x, y float64) {
+	m.posMu.Lock()
+	m.lastX, m.lastY = x, y
+	m.posMu.Unlock()
 }
 
 // MoveTo glides the cursor to (x,y) in viewport CSS pixels along a human-like
@@ -34,7 +45,7 @@ func (m *MouseAPI) MoveTo(x, y float64) error {
 	if err := m.p.cursorEngine().MoveTo(m.p.ctx(), x, y); err != nil {
 		return err
 	}
-	m.lastX, m.lastY = x, y
+	m.setLast(x, y)
 	return nil
 }
 
@@ -43,7 +54,7 @@ func (m *MouseAPI) ClickAt(x, y float64) error {
 	if err := m.clickButton(x, y, input.MouseLeft); err != nil {
 		return err
 	}
-	m.lastX, m.lastY = x, y
+	m.setLast(x, y)
 	return nil
 }
 
@@ -67,7 +78,7 @@ func (m *MouseAPI) RightClick(selector string) error {
 	if err := m.clickButton(cx, cy, input.MouseRight); err != nil {
 		return err
 	}
-	m.lastX, m.lastY = cx, cy
+	m.setLast(cx, cy)
 	return nil
 }
 
@@ -77,7 +88,7 @@ func (m *MouseAPI) MiddleClick(x, y float64) error {
 	if err := m.clickButton(x, y, input.MouseMiddle); err != nil {
 		return err
 	}
-	m.lastX, m.lastY = x, y
+	m.setLast(x, y)
 	return nil
 }
 
@@ -98,7 +109,7 @@ func (m *MouseAPI) DoubleClick(selector string) error {
 	if err := m.clickButton(cx, cy, input.MouseLeft); err != nil {
 		return err
 	}
-	m.lastX, m.lastY = cx, cy
+	m.setLast(cx, cy)
 	// Browsers expect two clicks within ~500ms; insert a small gap.
 	time.Sleep(40 * time.Millisecond)
 	if err := m.clickButton(cx, cy, input.MouseLeft); err != nil {
@@ -126,8 +137,11 @@ func (m *MouseAPI) Scroll(deltaX, deltaY float64) error {
 
 // scrollOrigin returns the wheel origin: last cursor pos, else viewport center.
 func (m *MouseAPI) scrollOrigin() (float64, float64) {
-	if m.lastX != sentinelPos {
-		return m.lastX, m.lastY
+	m.posMu.Lock()
+	lx, ly := m.lastX, m.lastY
+	m.posMu.Unlock()
+	if lx != sentinelPos {
+		return lx, ly
 	}
 	// Fallback: read viewport dimensions via JS.
 	var dims [2]float64
@@ -164,7 +178,7 @@ func (m *MouseAPI) Drag(fromX, fromY, toX, toY float64) error {
 		_ = b.MouseUp(ctx, toX, toY, input.MouseLeft)
 		return err
 	}
-	m.lastX, m.lastY = toX, toY
+	m.setLast(toX, toY)
 	// Sync the cursor engine to the drag end-point — the press-hold-move above
 	// bypassed it, so without this the next glide would seed from the drag
 	// source (visible backward jump on the BiDi backend, which has no OS cursor

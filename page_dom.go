@@ -1,6 +1,7 @@
 package firefoxkit
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -53,6 +54,9 @@ func (p *Page) QuerySelector(selector string, timeout time.Duration) (*ElementHa
 		SharedID string `json:"sharedId"`
 	}
 	if err := json.Unmarshal(res.Result, &rv); err != nil {
+		// The node was granted an ownership=root handle we can no longer use —
+		// release it so Firefox doesn't pin the object forever.
+		p.disownHandles(justHandle(res.Result))
 		return nil, wrapEvalErr(err)
 	}
 	if rv.Type == "null" || rv.Handle == "" {
@@ -83,13 +87,22 @@ func (p *Page) QuerySelectorAll(selector string, timeout time.Duration) ([]*Elem
 	if err != nil {
 		return nil, wrapEvalErr(err)
 	}
+	if res.Type == "exception" {
+		return nil, wrapEvalErr(fmt.Errorf("querySelectorAll: %s", res.ExceptionDetails.Text))
+	}
 	var rv struct {
-		Type  string            `json:"type"`
-		Value []json.RawMessage `json:"value"`
+		Type   string            `json:"type"`
+		Handle string            `json:"handle"`
+		Value  []json.RawMessage `json:"value"`
 	}
 	if err := json.Unmarshal(res.Result, &rv); err != nil {
+		p.disownHandles(justHandle(res.Result))
 		return nil, wrapEvalErr(err)
 	}
+	// The array itself was granted an ownership=root handle. Element handles
+	// inside it stay owned by the caller; the array wrapper must be released
+	// or Firefox pins it (and transitively every node) until the realm dies.
+	p.disownHandles(rv.Handle)
 	out := make([]*ElementHandle, 0, len(rv.Value))
 	for _, item := range rv.Value {
 		var n struct {
@@ -104,6 +117,43 @@ func (p *Page) QuerySelectorAll(selector string, timeout time.Duration) ([]*Elem
 		}
 	}
 	return out, nil
+}
+
+// justHandle extracts only the top-level "handle" field from a RemoteValue,
+// tolerating payloads that fail full decoding. Empty string when absent.
+func justHandle(raw json.RawMessage) string {
+	var h struct {
+		Handle string `json:"handle"`
+	}
+	_ = json.Unmarshal(raw, &h)
+	return h.Handle
+}
+
+// disownHandles releases remote-object handles best-effort on a background
+// goroutine: the page may be navigating or closing, and a failed disown must
+// never fail the call that produced it.
+func (p *Page) disownHandles(handles ...string) {
+	live := handles[:0]
+	for _, h := range handles {
+		if h != "" {
+			live = append(live, h)
+		}
+	}
+	if len(live) == 0 {
+		return
+	}
+	go func() {
+		// Bounded ctx: a server that never answers the disown must not pin this
+		// goroutine forever (the base ctx only cancels at Browser.Close).
+		ctx, cancel := context.WithTimeout(p.ctx(), 5*time.Second)
+		defer cancel()
+		if err := p.browser.client.Disown(ctx, bidi.DisownParams{
+			Handles: live,
+			Target:  bidi.EvaluateTarget{Context: p.contextID},
+		}); err != nil && p.log != nil {
+			p.log.Debugf("firefoxkit: disown %v: %v", live, err)
+		}
+	}()
 }
 
 // BoundingBox returns the layout rectangle of the first matching element.

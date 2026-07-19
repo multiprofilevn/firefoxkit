@@ -72,7 +72,7 @@ func fetchRemotePath(ctx context.Context, hc *http.Client, url string, fromX, fr
 // (within 1px). A path that drifts off-target would land clicks in the wrong
 // place — reject it and fall back to local bezier.
 func validRemotePath(pts []remotePoint, toX, toY float64) bool {
-	if len(pts) == 0 {
+	if len(pts) == 0 || len(pts) > maxRemotePathPoints {
 		return false
 	}
 	// Reject any non-finite point (a malformed server, or JSON null decoded to

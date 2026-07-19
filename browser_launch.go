@@ -118,21 +118,29 @@ func Launch(firefoxPath string, opts ...Option) (*Browser, error) {
 	}
 
 	b := &Browser{
-		client:    client,
-		cfg:       cfg,
-		log:       cfg.logger,
-		proc:      cmd.Process,
-		closeProc: true,
-		wsURL:     wsURL,
-		sessionID: sess.SessionID,
+		client:         client,
+		cfg:            cfg,
+		log:            cfg.logger,
+		proc:           cmd.Process,
+		closeProc:      true,
+		wsURL:          wsURL,
+		sessionID:      sess.SessionID,
+		cleanupProfile: cleanupProfile,
 	}
 	b.initBaseCtx()
 
+	// Reap the child if Firefox exits on its own (crash, user quit) so the
+	// process entry doesn't linger until Close(). Close's redundant Wait on an
+	// already-reaped process returns an error that is ignored.
+	go func() { _ = cmd.Wait() }()
+
 	if err := b.populateInitialPage(ctx); err != nil {
-		_ = b.Close()
-		// b.Close already cleans profile via closeProc; remove backing dir too.
-		cleanupProfile()
+		_ = b.Close() // Close kills the process and removes the temp profile.
 		return nil, err
+	}
+	if err := b.watchContextLifecycle(ctx); err != nil && cfg.logger != nil {
+		// Degraded but usable: self-closed tabs won't be pruned automatically.
+		cfg.logger.Warnf("firefoxkit: contextDestroyed subscribe: %v", err)
 	}
 	return b, nil
 }
@@ -162,7 +170,20 @@ func ensureProfileDir(cfg *config) (string, func(), error) {
 	if err != nil {
 		return "", func() {}, fmt.Errorf("%w: temp profile: %v", ErrInvalidConfig, err)
 	}
-	return dir, func() { _ = os.RemoveAll(dir) }, nil
+	return dir, func() { removeProfileDirWithRetry(dir) }, nil
+}
+
+// removeProfileDirWithRetry deletes a temp profile dir, retrying briefly:
+// right after the Firefox process is killed, Windows may still hold file locks
+// on sqlite/cache files for a moment.
+func removeProfileDirWithRetry(dir string) {
+	for i := 0; i < 5; i++ {
+		if err := os.RemoveAll(dir); err == nil {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	_ = os.RemoveAll(dir) // last attempt; leftover dir is logged nowhere — best-effort
 }
 
 // writeUserPrefs assembles user.js with the prefs needed to enable BiDi +
@@ -272,8 +293,12 @@ func discoverBiDiURL(ctx context.Context, port int, stderr io.ReadCloser, logger
 		for scanner.Scan() {
 			line := scanner.Text()
 			mu.Lock()
-			stderrBuf.WriteString(line)
-			stderrBuf.WriteString("\n")
+			// Cap the retained buffer so a Firefox that never prints the
+			// expected line (log format change) can't grow it unbounded.
+			if stderrBuf.Len() < 64*1024 {
+				stderrBuf.WriteString(line)
+				stderrBuf.WriteString("\n")
+			}
 			mu.Unlock()
 			if m := bidiListenRegex.FindStringSubmatch(line); len(m) == 2 {
 				select {
