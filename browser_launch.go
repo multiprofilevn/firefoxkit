@@ -94,8 +94,9 @@ func Launch(firefoxPath string, opts ...Option) (*Browser, error) {
 	}
 
 	client, err := bidi.Dial(ctx, wsURL, bidi.Options{
-		HTTPClient: http.DefaultClient,
-		Logger:     toBiDiLogger(cfg.logger),
+		HTTPClient:         http.DefaultClient,
+		Logger:             toBiDiLogger(cfg.logger),
+		DefaultCallTimeout: cfg.commandTimeout,
 	})
 	if err != nil {
 		cleanup()

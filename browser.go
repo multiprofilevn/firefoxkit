@@ -10,6 +10,13 @@ import (
 	"github.com/tuwibu/firefoxkit/internal/bidi"
 )
 
+// gracefulCloseBudget bounds the graceful phase of Browser.Close (drainer
+// join + per-page cleanup sweep). On a healthy peer that phase finishes in
+// milliseconds; on a dead/hung peer a cleanup RPC can wedge inside conn.Write
+// (writeJSON ignores caller ctx) — the budget caps the wait, after which the
+// client is torn down to error the stuck write out.
+const gracefulCloseBudget = 2 * time.Second
+
 // Browser owns a Firefox process (Launch) or attaches to one (Connect) and
 // manages the pages opened on it.
 type Browser struct {
@@ -41,6 +48,14 @@ type Browser struct {
 	pagesMu sync.RWMutex
 	pages   []*Page
 	current *Page
+
+	// Cleanup drainer for contextDestroyed pages: detach happens synchronously
+	// on the subscription worker; the blocking per-page cleanup RPCs are queued
+	// here and drained by a small worker pool. Started by watchContextLifecycle,
+	// joined by Close via stopCleanupDrainer. Nil when the watch never started.
+	cleanupCh   chan *Page
+	cleanupStop chan struct{}
+	cleanupWG   sync.WaitGroup
 
 	closeOnce sync.Once
 }
@@ -125,25 +140,48 @@ func (b *Browser) Close() error {
 		if b.baseCancel != nil {
 			b.baseCancel()
 		}
+		// Signal the cleanup drainer to stop taking new work — but do NOT
+		// block on the join here. baseCancel cannot unblock a worker wedged
+		// inside conn.Write (writeJSON runs under its own internal ctx); only
+		// the write timeout or the client teardown below frees it, so an
+		// unconditional Wait would stall Close for up to the full writeTimeout
+		// on a dead peer.
+		b.signalCleanupDrainer()
 		b.pagesMu.Lock()
 		pages := b.pages
 		b.pages = nil
 		b.current = nil
 		b.pagesMu.Unlock()
-		// Best-effort per-page cleanup BEFORE the BiDi client tears down —
-		// once the WS is closed, RemoveIntercept/Unsubscribe RPCs will fail.
-		// Use a short background ctx since callers of Close() don't pass one.
-		cleanupCtx, ccancel := context.WithTimeout(context.Background(), 3*time.Second)
-		for _, p := range pages {
-			p.cleanup(cleanupCtx)
+		// Graceful phase, bounded: per-page cleanup sweep + drainer join.
+		// Runs BEFORE the BiDi client tears down so RemoveIntercept /
+		// Unsubscribe RPCs still succeed on a healthy peer (finishes in ms).
+		// On a dead/hung peer the budget expires and we proceed — client.Close
+		// below errors any stuck write out, making the final join fast.
+		graceful := make(chan struct{})
+		go func() {
+			defer close(graceful)
+			cleanupCtx, ccancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer ccancel()
+			for _, p := range pages {
+				p.cleanup(cleanupCtx)
+			}
+			b.cleanupWG.Wait()
+		}()
+		select {
+		case <-graceful:
+		case <-time.After(gracefulCloseBudget):
 		}
-		ccancel()
 
 		if b.client != nil {
 			if err := b.client.Close(); err != nil {
 				firstErr = err
 			}
 		}
+		// Final join — no goroutine may outlive Close. Fast now: with the
+		// client closed, stuck writes fail immediately and both the drainer
+		// workers and the sweep goroutine exit promptly.
+		b.cleanupWG.Wait()
+		<-graceful
 		if b.closeProc && b.proc != nil {
 			if err := b.proc.Kill(); err != nil && firstErr == nil {
 				firstErr = fmt.Errorf("kill firefox pid=%d: %w", b.proc.Pid, err)

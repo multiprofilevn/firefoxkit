@@ -42,8 +42,9 @@ type config struct {
 	mousePathURL  string
 	flags         map[string]string
 	prefs         map[string]any
-	modifyCmd     func(*exec.Cmd)
-	launchTimeout time.Duration
+	modifyCmd      func(*exec.Cmd)
+	launchTimeout  time.Duration
+	commandTimeout time.Duration
 }
 
 func defaultConfig() *config {
@@ -56,6 +57,9 @@ func defaultConfig() *config {
 		flags:         map[string]string{},
 		prefs:         map[string]any{},
 		launchTimeout: 30 * time.Second,
+		// Backstop for BiDi calls whose ctx carries no deadline — wide enough
+		// for the slowest legitimate RPC (screenshot/nav ~ seconds).
+		commandTimeout: 60 * time.Second,
 	}
 }
 
@@ -126,6 +130,18 @@ func WithModifyCmd(fn func(*exec.Cmd)) Option {
 	return func(c *config) {
 		if fn != nil {
 			c.modifyCmd = fn
+		}
+	}
+}
+
+// WithCommandTimeout overrides the default 60s backstop applied to BiDi
+// commands whose context has no deadline. Pass 0 to disable the backstop
+// (calls may then block until the browser closes). Negative values are
+// ignored.
+func WithCommandTimeout(d time.Duration) Option {
+	return func(c *config) {
+		if d >= 0 {
+			c.commandTimeout = d
 		}
 	}
 }

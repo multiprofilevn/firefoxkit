@@ -73,7 +73,7 @@ b, _ := firefoxkit.Launch(
 | Page     | `Navigate(url, timeout)` / `Reload` / `GoBack` / `GoForward` | navigation |
 | Page     | `WaitForReady` / `WaitForSelector` / `WaitForChangeURL` / `WaitForFunction` | sync |
 | Page     | `Click(sel)` / `ClickElement(sel)` / `Type(text)` / `Hover(sel)` | high-level shortcut |
-| Page     | `Evaluate(expr, out)` / `EvalSelector(sel, fn, out)` / `EvalSelectorAll`   | run JS |
+| Page     | `Evaluate(expr, out)` / `EvaluateCtx(ctx, expr, out)` / `EvalSelector(sel, fn, out)` / `EvalSelectorAll` | run JS |
 | Page     | `Screenshot()` / `FullScreenshot(q)` / `ScreenshotClip(x,y,w,h)` / `ScreenshotElement(sel)` | PNG / JPEG capture |
 | Page     | `QuerySelector` / `QuerySelectorAll` / `BoundingBox` / `GetText` / `GetAttribute` / `ScrollIntoView` / `Focus` | DOM |
 | Page     | `SetExtraHeaders(map)` / `SetInputFiles(sel, paths...)` / `SetValue(sel, val)` / `CheckBox(sel, bool)` | request shaping / input |
@@ -103,9 +103,12 @@ b, _ := firefoxkit.Launch(
 | `WithPref(key, value)` | raw Firefox preference (`user_pref`) |
 | `WithModifyCmd(fn)` | hook `*exec.Cmd` before Firefox starts |
 | `WithLaunchTimeout(d)` | override 30s default for launch + session.new |
+| `WithCommandTimeout(d)` | override the 60s default backstop applied to BiDi commands whose context has no deadline (0 disables) |
 | `WithPermissionsDefault(perm, allow)` | blanket allow/block at launch (no per-origin) |
 | `WithDownloadDir(dir)` | save downloads here (paired with WithAcceptDownloads) |
 | `WithAcceptDownloads(b)` | suppress download dialog |
+
+Every BiDi command issued without an explicit deadline (the ctx-less API surface) falls under a **60s default command timeout** — a backstop so a lost response can't park a goroutine forever. Change it globally with `WithCommandTimeout(d)` (`0` disables). A script whose awaited promise legitimately runs longer than 60s should use `EvaluateCtx` with an explicit longer deadline, e.g. `p.EvaluateCtx(ctxWith5MinTimeout, expr, &out)` — a caller-supplied deadline always takes precedence over the backstop.
 
 ## Input backends
 

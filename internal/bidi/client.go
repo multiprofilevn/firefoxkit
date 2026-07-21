@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -38,6 +39,10 @@ type Client struct {
 
 	nextID atomic.Int64
 
+	// defaultCallTimeout is the backstop deadline applied in Send when the
+	// caller ctx has none. 0 disables the backstop (legacy park-until-Close).
+	defaultCallTimeout time.Duration
+
 	mu      sync.Mutex
 	pending map[int]chan *frame
 
@@ -51,6 +56,11 @@ type Client struct {
 type Options struct {
 	HTTPClient *http.Client
 	Logger     Logger
+	// DefaultCallTimeout is the backstop deadline Send applies when the caller
+	// ctx has no deadline of its own. A lost response on an alive connection
+	// then fails with ErrCommandTimeout instead of parking the goroutine for
+	// the browser lifetime. 0 disables the backstop.
+	DefaultCallTimeout time.Duration
 }
 
 // Dial connects to the BiDi endpoint at url (e.g. ws://127.0.0.1:9222/session)
@@ -60,7 +70,10 @@ func Dial(ctx context.Context, url string, opts Options) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newClient(t, opts.Logger), nil
+	c := newClient(t, opts.Logger)
+	// Safe to set post-construction: no Send can run before Dial returns.
+	c.defaultCallTimeout = opts.DefaultCallTimeout
+	return c, nil
 }
 
 // newClient wires a Client around any transport — used by tests with a fake.
@@ -84,6 +97,24 @@ func newClient(t transport, logger Logger) *Client {
 // discard). Returns *BiDiError on protocol-level errors, ctx.Err() on
 // cancellation, ErrClientClosed if the client shuts down mid-flight.
 func (c *Client) Send(ctx context.Context, method string, params, out any) error {
+	// Fail fast: the frame write no longer honors the caller ctx (see
+	// wsTransport.writeJSON), so an already-cancelled caller must bail here
+	// before emitting a wasted frame.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Backstop: callers without a deadline get the configured default so a
+	// lost response can't park this goroutine (and its pending entry) forever.
+	// A caller-supplied deadline is never overridden.
+	if d := c.defaultCallTimeout; d > 0 {
+		if _, ok := ctx.Deadline(); !ok {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, d)
+			defer cancel()
+		}
+	}
+
 	id := int(c.nextID.Add(1))
 	ch := make(chan *frame, 1)
 

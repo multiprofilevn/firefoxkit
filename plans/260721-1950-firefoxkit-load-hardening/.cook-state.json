@@ -1,0 +1,13 @@
+{
+  "totalPhases": 5,
+  "completedPhases": 3,
+  "status": "in-progress",
+  "currentPhase": null,
+  "completedPhaseNames": [
+    "phase-01-f1-send-default-timeout",
+    "phase-02-f2-write-teardown-guard",
+    "phase-03-l1-non-blocking-context-prune"
+  ],
+  "epicDir": null,
+  "lastUpdated": "2026-07-21T14:00:47.207Z"
+}

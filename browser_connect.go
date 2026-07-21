@@ -31,8 +31,9 @@ func Connect(port int, opts ...Option) (*Browser, error) {
 	defer cancel()
 
 	client, err := bidi.Dial(ctx, wsURL, bidi.Options{
-		HTTPClient: http.DefaultClient,
-		Logger:     toBiDiLogger(cfg.logger),
+		HTTPClient:         http.DefaultClient,
+		Logger:             toBiDiLogger(cfg.logger),
+		DefaultCallTimeout: cfg.commandTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: dial %s: %v", ErrBiDiSessionFailed, wsURL, err)

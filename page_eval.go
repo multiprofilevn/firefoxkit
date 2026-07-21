@@ -10,8 +10,20 @@ import (
 
 // Evaluate runs expression as JS in this page's realm and decodes the result
 // into out. Pass nil for out to discard the result.
+//
+// Note: with no caller deadline the call falls under the client's default
+// command backstop (60s unless changed via WithCommandTimeout). Scripts whose
+// awaited promise legitimately outlives that should use EvaluateCtx with an
+// explicit longer deadline.
 func (p *Page) Evaluate(expression string, out any) error {
-	return p.evaluateCtx(p.ctx(), expression, out)
+	return p.EvaluateCtx(p.ctx(), expression, out)
+}
+
+// EvaluateCtx is Evaluate with a caller-supplied context. A ctx WITH a
+// deadline takes precedence over the default command backstop, so long JS
+// awaits (> 60s) work by passing e.g. context.WithTimeout(ctx, 5*time.Minute).
+func (p *Page) EvaluateCtx(ctx context.Context, expression string, out any) error {
+	return p.evaluateCtx(ctx, expression, out)
 }
 
 // evaluateCtx is the internal ctx-aware variant used by poll loops (WaitFor*)
