@@ -3,6 +3,8 @@ package firefoxkit
 import (
 	"os/exec"
 	"time"
+
+	"github.com/tuwibu/firefoxkit/input"
 )
 
 // BackendType selects how firefoxkit dispatches mouse/keyboard input.
@@ -39,6 +41,7 @@ type config struct {
 	inputBackend  BackendType
 	nativeWindow  nativeWindow
 	cursorProfile CursorProfile
+	cursorTuning  input.CursorTuning
 	mousePathURL  string
 	flags         map[string]string
 	prefs         map[string]any
@@ -110,6 +113,15 @@ func WithNativeWindow(x, y int, scale float64) Option {
 
 func WithCursorProfile(p CursorProfile) Option {
 	return func(c *config) { c.cursorProfile = p }
+}
+
+// WithCursorTuning caps ProfileHuman's step count and per-point delay range
+// (input.CursorTuning). Zero-value (default) keeps current behavior (80-step
+// cap, 8-18ms delay). Use to trade human-likeness for lower per-move latency
+// under heavy concurrency — see README "Cursor profile / load" guidance.
+// No effect on ProfileFast / ProfileMachine.
+func WithCursorTuning(t input.CursorTuning) Option {
+	return func(c *config) { c.cursorTuning = t }
 }
 
 // WithFlag adds a raw Firefox CLI flag. Key is the flag name (with leading

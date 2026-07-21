@@ -28,6 +28,7 @@ const maxRemotePathPoints = 2000
 type Cursor struct {
 	backend Backend
 	profile Profile
+	tuning  CursorTuning
 
 	mu   sync.Mutex
 	x, y float64
@@ -157,9 +158,27 @@ func (c *Cursor) buildPath(ctx context.Context, x, y float64) []PathPoint {
 				return out
 			}
 		}
-		steps := humanStepCount(c.x, c.y, x, y)
-		return withDelays(bezierPath(c.x, c.y, x, y, steps), func() int { return 8 + rand.Intn(11) })
+		steps := humanStepCount(c.x, c.y, x, y, c.tuning.MaxSteps)
+		return withDelays(bezierPath(c.x, c.y, x, y, steps), humanDelayFunc(c.tuning))
 	}
+}
+
+// humanDelayFunc returns the per-point delay generator for ProfileHuman,
+// honoring CursorTuning's [MinDelayMs, MaxDelayMs] window. Zero-value tuning
+// keeps the original fixed 8-18ms range.
+func humanDelayFunc(t CursorTuning) func() int {
+	minDelay, maxDelay := t.MinDelayMs, t.MaxDelayMs
+	if minDelay <= 0 && maxDelay <= 0 {
+		minDelay, maxDelay = 8, 18
+	}
+	if minDelay < 0 {
+		minDelay = 0
+	}
+	if maxDelay < minDelay {
+		maxDelay = minDelay
+	}
+	span := maxDelay - minDelay + 1
+	return func() int { return minDelay + rand.Intn(span) }
 }
 
 // withDelays attaches a per-point delay drawn from next() to each path point.

@@ -31,8 +31,8 @@ stress/concurrency hiện có. YAGNI/KISS: không thêm knob/tối ưu chưa có
 | 1 | [F1 Send default timeout](./phase-01-f1-send-default-timeout.md) | Pending |
 | 2 | [F2 write-teardown guard](./phase-02-f2-write-teardown-guard.md) | Pending |
 | 3 | [L1 non-blocking context prune](./phase-03-l1-non-blocking-context-prune.md) | Pending |
-| 4 | [PERF adaptive cursor knob](./phase-04-perf-adaptive-cursor-knob.md) | Pending |
-| 5 | [Stress harness empirical](./phase-05-stress-harness-empirical.md) | Pending |
+| 4 | [PERF adaptive cursor knob](./phase-04-perf-adaptive-cursor-knob.md) | Completed |
+| 5 | [Stress harness empirical](./phase-05-stress-harness-empirical.md) | Completed |
 
 Phase 1–4 độc lập (khác file), có thể làm tuần tự bất kỳ; test dùng mock harness
 (`newMockBrowser` / `fakeTransport`, KHÔNG cần Firefox thật). Phase 5 (harness thực nghiệm, build

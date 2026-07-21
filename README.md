@@ -98,7 +98,8 @@ b, _ := firefoxkit.Launch(
 | `WithProxy(addr)` | route Firefox through `host:port` proxy |
 | `WithInputBackend(t)` | `BackendBiDi` (default) or `BackendNative` |
 | `WithNativeWindow(x, y, scale)` | window offset + DPI for native backend |
-| `WithCursorProfile(p)` | `CursorHuman` / `CursorFast` / `CursorMachine` (native backend only) |
+| `WithCursorProfile(p)` | `CursorHuman` / `CursorFast` / `CursorMachine` (applies to both BiDi and Native) |
+| `WithCursorTuning(t)` | cap `ProfileHuman`'s step count / delay range (`input.CursorTuning`) — see "Cursor profile / load" below |
 | `WithFlag(key, value)` | pass arbitrary Firefox CLI flag |
 | `WithPref(key, value)` | raw Firefox preference (`user_pref`) |
 | `WithModifyCmd(fn)` | hook `*exec.Cmd` before Firefox starts |
@@ -122,6 +123,32 @@ Every BiDi command issued without an explicit deadline (the ctx-less API surface
 | Dependencies       | none                                             | none — uses `syscall` + `user32.dll`     |
 
 Pick BiDi for general automation. Pick Native when scraping a site that fingerprints synthetic events. Combining `WithHeadless(true)` + `BackendNative` returns `ErrInvalidConfig` — native needs a real window.
+
+## Cursor profile / load
+
+`ProfileHuman` (default) glides along a bezier path with per-point delays — realistic, but each move
+can take up to ~1s under heavy concurrency (Firefox runs the pause synchronously before replying).
+`WithCursorTuning` lets you shrink `ProfileHuman`'s step cap / delay range without giving up the
+bezier shape; `WithCursorProfile` switches profile entirely. Pick based on concurrency:
+
+| Need | Profile | Latency/move (measured) |
+|---|---|---|
+| low concurrency, human-like | Human (default) | ~0.6–1s |
+| medium | Human + `WithCursorTuning(input.CursorTuning{MaxSteps: 30})` | ~0.2–0.4s |
+| high (many pages/browsers) | `WithCursorProfile(CursorFast)` | ~0.2s |
+| very high / human-likeness not needed | `WithCursorProfile(CursorMachine)` | ~15–30ms |
+
+Figures measured on Firefox 149, headless, single idle page (`integration_stress_move_test.go`,
+`-tags stress`). Under fleet load (many pages competing for CPU) latency rises — profile choice is the
+main lever you control.
+
+**Scaling shape (measured):** Firefox runs `input.performActions` **in parallel across different
+browsing contexts** (20 concurrent pages → ~1.15× a single move, not ~20×). So scale with **more pages
+per browser, one goroutine per page** — the real bottleneck is the *per-page* cursor mutex (20
+goroutines moving the **same** page serialize to ~14.5× a single move), not a Firefox-side actor.
+
+`CursorTuning` only trades human-likeness for speed — it does not fix CPU oversubscription from
+running too many browsers per core; see the load-hardening notes for that.
 
 ## Platform support
 

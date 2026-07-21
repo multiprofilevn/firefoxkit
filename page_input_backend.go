@@ -87,6 +87,7 @@ func (p *Page) cursorEngine() *input.Cursor {
 			profile = input.ProfileMachine
 		}
 		p.cursor = input.NewCursorWithProfileAndPath(p.inputBackend(), profile, p.browser.cfg.mousePathURL)
+		p.cursor.SetTuning(p.browser.cfg.cursorTuning)
 	})
 	return p.cursor
 }

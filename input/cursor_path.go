@@ -39,14 +39,23 @@ func interpolate(x1, y1, x2, y2 float64, steps int) []Point {
 	return out
 }
 
-func humanStepCount(x1, y1, x2, y2 float64) int {
+// humanStepCount picks the bezier path's point count for ProfileHuman.
+// maxSteps caps the upper bound; <= 0 keeps the default cap of 80.
+func humanStepCount(x1, y1, x2, y2 float64, maxSteps int) int {
+	if maxSteps <= 0 {
+		maxSteps = 80
+	}
+	minSteps := 8
+	if minSteps > maxSteps {
+		minSteps = maxSteps
+	}
 	dist := math.Hypot(x2-x1, y2-y1)
 	steps := int(dist / 12)
-	if steps < 8 {
-		return 8
+	if steps < minSteps {
+		return minSteps
 	}
-	if steps > 80 {
-		return 80
+	if steps > maxSteps {
+		return maxSteps
 	}
 	return steps
 }

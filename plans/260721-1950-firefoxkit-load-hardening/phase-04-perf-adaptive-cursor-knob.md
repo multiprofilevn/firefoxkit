@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "PERF adaptive cursor knob"
-status: pending
+status: completed
 priority: P2
 effort: "3h"
 test-strategy: tdd
