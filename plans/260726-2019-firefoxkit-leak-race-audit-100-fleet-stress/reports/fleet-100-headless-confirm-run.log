@@ -1,0 +1,15 @@
+=== RUN   TestStress_FleetWorkload
+    integration_stress_fleet_workload_test.go:223: fleet workload: N=100 headless=true duration=2m0s
+    integration_stress_fleet_workload_test.go:246: post-launch: goroutines=803 heapAllocMB=10 fleetParentRSSMB=604 allFirefoxRSSMB=66520 freePhysMB=83998
+    integration_stress_fleet_workload_test.go:269: sample t=16s goroutines=1004 heapAllocMB=10 sysMB=58 allFirefoxRSSMB=69352 freePhysMB=81021
+    integration_stress_fleet_workload_test.go:269: sample t=31s goroutines=1004 heapAllocMB=9 sysMB=58 allFirefoxRSSMB=70590 freePhysMB=80821
+    integration_stress_fleet_workload_test.go:269: sample t=47s goroutines=1004 heapAllocMB=12 sysMB=58 allFirefoxRSSMB=70662 freePhysMB=81154
+    integration_stress_fleet_workload_test.go:269: sample t=1m1s goroutines=1004 heapAllocMB=15 sysMB=58 allFirefoxRSSMB=66905 freePhysMB=80925
+    integration_stress_fleet_workload_test.go:269: sample t=1m16s goroutines=1004 heapAllocMB=9 sysMB=59 allFirefoxRSSMB=70573 freePhysMB=79995
+    integration_stress_fleet_workload_test.go:269: sample t=1m31s goroutines=1004 heapAllocMB=12 sysMB=59 allFirefoxRSSMB=71341 freePhysMB=79840
+    integration_stress_fleet_workload_test.go:269: sample t=1m46s goroutines=1004 heapAllocMB=12 sysMB=59 allFirefoxRSSMB=71507 freePhysMB=80543
+    integration_stress_fleet_workload_test.go:269: sample t=2m1s goroutines=996 heapAllocMB=16 sysMB=59 allFirefoxRSSMB=71177 freePhysMB=79904
+    integration_stress_fleet_workload_test.go:304: SUMMARY: iters=3018 errors=0 goroutines before=3 after=3 heapAllocMB post-launch=10 post-close=4
+--- PASS: TestStress_FleetWorkload (732.71s)
+PASS
+ok  	github.com/tuwibu/firefoxkit	735.472s

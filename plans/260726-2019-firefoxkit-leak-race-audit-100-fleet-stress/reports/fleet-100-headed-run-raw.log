@@ -1,0 +1,22 @@
+=== RUN   TestStress_FleetWorkload
+    integration_stress_fleet_workload_test.go:204: fleet workload: N=100 headless=false duration=3m0s
+    integration_stress_fleet_workload_test.go:224: post-launch: goroutines=803 heapAllocMB=8 fleetParentRSSMB=609 allFirefoxRSSMB=76278 freePhysMB=79131
+    integration_stress_fleet_workload_test.go:147: browser 52 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:147: browser 11 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:147: browser 61 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:147: browser 33 iter step navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:147: browser 50 iter step navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:147: browser 67 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:147: browser 59 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:147: browser 22 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:245: sample t=19s goroutines=1004 heapAllocMB=13 sysMB=57 fleetParentRSSMB=608 allFirefoxRSSMB=89731 freePhysMB=72740
+    integration_stress_fleet_workload_test.go:245: sample t=8m36s goroutines=804 heapAllocMB=13 sysMB=94 fleetParentRSSMB=608 allFirefoxRSSMB=89717 freePhysMB=65877
+    integration_stress_fleet_workload_test.go:245: sample t=14m6s goroutines=804 heapAllocMB=11 sysMB=94 fleetParentRSSMB=608 allFirefoxRSSMB=89716 freePhysMB=65914
+    integration_stress_fleet_workload_test.go:245: sample t=19m34s goroutines=804 heapAllocMB=10 sysMB=94 fleetParentRSSMB=608 allFirefoxRSSMB=89735 freePhysMB=65942
+    integration_stress_fleet_workload_test.go:280: SUMMARY: iters=1414 errors=8 goroutines before=3 after=267 heapAllocMB post-launch=8 post-close=6
+    integration_stress_fleet_workload_test.go:285: workload finished with 8 errors (see log)
+    integration_stress_fleet_workload_test.go:288: goroutine leak after fleet close: before=3 after=267 (delta=264 > 20)
+--- FAIL: TestStress_FleetWorkload (2334.68s)
+FAIL
+exit status 1
+FAIL	github.com/tuwibu/firefoxkit	2336.442s

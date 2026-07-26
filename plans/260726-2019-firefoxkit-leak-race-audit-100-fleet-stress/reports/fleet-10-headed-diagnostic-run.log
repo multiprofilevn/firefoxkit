@@ -1,0 +1,9 @@
+=== RUN   TestStress_FleetWorkload
+    integration_stress_fleet_workload_test.go:223: fleet workload: N=10 headless=false duration=30s
+    integration_stress_fleet_workload_test.go:244: post-launch: goroutines=83 heapAllocMB=2 fleetParentRSSMB=60 allFirefoxRSSMB=7687 freePhysMB=111993
+    integration_stress_fleet_workload_test.go:265: sample t=15s goroutines=104 heapAllocMB=2 sysMB=25 fleetParentRSSMB=60 allFirefoxRSSMB=8332 freePhysMB=111603
+    integration_stress_fleet_workload_test.go:265: sample t=30s goroutines=104 heapAllocMB=3 sysMB=25 fleetParentRSSMB=60 allFirefoxRSSMB=8257 freePhysMB=111610
+    integration_stress_fleet_workload_test.go:300: SUMMARY: iters=310 errors=0 goroutines before=3 after=3 heapAllocMB post-launch=2 post-close=1
+--- PASS: TestStress_FleetWorkload (81.48s)
+PASS
+ok  	github.com/tuwibu/firefoxkit	84.120s
