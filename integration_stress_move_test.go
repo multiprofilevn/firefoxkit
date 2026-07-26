@@ -15,7 +15,9 @@ package firefoxkit_test
 
 import (
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -337,4 +339,144 @@ func TestStress_ChurnGrowth_NoLeak(t *testing.T) {
 	} else {
 		t.Log("RSS unavailable on this platform; skipped RSS growth assertion")
 	}
+}
+
+// fleetSize reads FIREFOXKIT_FLEET_N (default 25) — lets the caller push the
+// fleet reproduction toward the real 50-process/user deployment without
+// editing the test.
+func fleetSize(t *testing.T) int {
+	t.Helper()
+	const def = 25
+	v := os.Getenv("FIREFOXKIT_FLEET_N")
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		t.Fatalf("FIREFOXKIT_FLEET_N=%q invalid: %v", v, err)
+	}
+	return n
+}
+
+// launchFleet launches n SEPARATE Firefox processes (n distinct Browser
+// instances), each with one about:blank page, staggering launches slightly
+// to avoid a launch stampede. Aborts loudly on any Launch/Navigate error
+// (never silently skips a fleet member). Returns all browsers; caller must
+// Close every one — this helper itself defers-closes on any partial failure
+// so a mid-fleet abort still cleans up what was already launched.
+func launchFleet(t *testing.T, ff string, n int, profile firefoxkit.CursorProfile) []*firefoxkit.Browser {
+	t.Helper()
+	browsers := make([]*firefoxkit.Browser, 0, n)
+	cleanup := func() {
+		for _, b := range browsers {
+			b.Close()
+		}
+	}
+	for i := 0; i < n; i++ {
+		b, err := firefoxkit.Launch(ff, firefoxkit.WithHeadless(true), firefoxkit.WithCursorProfile(profile))
+		if err != nil {
+			cleanup()
+			t.Fatalf("fleet launch %d/%d failed: %v", i+1, n, err)
+		}
+		browsers = append(browsers, b)
+		if err := b.Current().Navigate("about:blank", 15*time.Second); err != nil {
+			cleanup()
+			t.Fatalf("fleet navigate %d/%d failed: %v", i+1, n, err)
+		}
+		time.Sleep(50 * time.Millisecond) // stagger to avoid a launch stampede
+	}
+	return browsers
+}
+
+// TestStress_Fleet_MoveLatency reproduces the REAL production deployment
+// shape: N SEPARATE Firefox PROCESSES (not N pages in one browser, not N
+// goroutines on one page) competing for CPU concurrently — the scenario
+// reported as "mouse moves slowly under load" in production (~50
+// processes/user). Headless here; a headed production fleet would be
+// equal-or-worse on CPU, so this is a conservative (best-case) measurement.
+//
+// Discovery test: does not hard-assert the degradation ratio. Asserts the
+// fleet completes launch/move/close without error.
+func TestStress_Fleet_MoveLatency(t *testing.T) {
+	ff := stressFirefox(t)
+	n := fleetSize(t)
+	t.Logf("fleet size N=%d (production reference: ~50 processes/user)", n)
+
+	fleet := launchFleet(t, ff, n, firefoxkit.CursorHuman)
+	defer func() {
+		for _, b := range fleet {
+			b.Close()
+		}
+	}()
+
+	// BASELINE: single browser, idle fleet siblings already running in the
+	// background (as they would be in production), sequential MoveTo,
+	// Human profile (the profile that reproduces the reported symptom).
+	const baselineN = 20
+	const warmup = 5
+	baseline := computeStats(measureMoves(t, fleet[0].Current().Mouse(), baselineN, warmup))
+	t.Logf("BASELINE (1 of %d browsers, Human): p50=%v p95=%v max=%v n=%d",
+		n, baseline.p50, baseline.p95, baseline.max, baseline.n)
+
+	// FLEET LOAD (Human): all N browsers move concurrently, one goroutine
+	// per browser, fixed count of moves each. Collect every move's latency
+	// across all browsers into one slice.
+	const movesPerBrowser = 15
+	humanFleetDurs := runFleetMoves(t, fleet, movesPerBrowser)
+	humanFleet := computeStats(humanFleetDurs)
+	degradation := float64(humanFleet.p50) / float64(baseline.p50)
+	t.Logf("FLEET LOAD Human (N=%d, %d moves/browser): p50=%v p95=%v max=%v n=%d degradation=%.2fx (fleet_p50/baseline_p50)",
+		n, movesPerBrowser, humanFleet.p50, humanFleet.p95, humanFleet.max, humanFleet.n, degradation)
+
+	// FLEET LOAD (Fast): repeat with the mitigation the user already has
+	// available (WithCursorProfile is per-browser at Launch time, so we
+	// re-launch the fleet with CursorFast).
+	for _, b := range fleet {
+		b.Close()
+	}
+	fastFleet := launchFleet(t, ff, n, firefoxkit.CursorFast)
+	fleet = fastFleet // so the deferred cleanup above closes the right set
+	fastFleetDurs := runFleetMoves(t, fleet, movesPerBrowser)
+	fastStats := computeStats(fastFleetDurs)
+	fastDegradation := float64(fastStats.p50) / float64(baseline.p50)
+	t.Logf("FLEET LOAD Fast (N=%d, %d moves/browser): p50=%v p95=%v max=%v n=%d degradation=%.2fx vs Human baseline",
+		n, movesPerBrowser, fastStats.p50, fastStats.p95, fastStats.max, fastStats.n, fastDegradation)
+
+	t.Logf("SUMMARY: baseline_p50=%v fleet_human_p50=%v (%.2fx) fleet_fast_p50=%v (%.2fx vs baseline)",
+		baseline.p50, humanFleet.p50, degradation, fastStats.p50, fastDegradation)
+}
+
+// runFleetMoves runs movesPerBrowser MoveTo calls concurrently across every
+// browser in fleet (one goroutine per browser), returns every move's latency
+// in one slice. Errors abort the test (never silently dropped).
+func runFleetMoves(t *testing.T, fleet []*firefoxkit.Browser, movesPerBrowser int) []time.Duration {
+	t.Helper()
+	var mu sync.Mutex
+	var all []time.Duration
+	var wg sync.WaitGroup
+	for i, b := range fleet {
+		wg.Add(1)
+		go func(i int, b *firefoxkit.Browser) {
+			defer wg.Done()
+			m := b.Current().Mouse()
+			local := make([]time.Duration, 0, movesPerBrowser)
+			for j := 0; j < movesPerBrowser; j++ {
+				x, y := fixedCoordsA[0], fixedCoordsA[1]
+				if j%2 == 1 {
+					x, y = fixedCoordsB[0], fixedCoordsB[1]
+				}
+				start := time.Now()
+				if err := m.MoveTo(x, y); err != nil {
+					t.Errorf("fleet browser %d MoveTo %d: %v", i, j, err)
+					return
+				}
+				local = append(local, time.Since(start))
+			}
+			mu.Lock()
+			all = append(all, local...)
+			mu.Unlock()
+		}(i, b)
+	}
+	wg.Wait()
+	return all
 }
