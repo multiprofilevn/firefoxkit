@@ -1,7 +1,7 @@
 {
-  "version": "1.4.0",
+  "version": "1.4.1",
   "plan": "",
-  "installed_at": "2026-07-14T08:13:14.0668596Z",
-  "checksum": "9da2f67b52c0c8c990698fae97d50dc290f3c7f04a824150b49c6dec79a5245c",
+  "installed_at": "2026-07-25T08:24:31.7035959Z",
+  "checksum": "f696a1a11ec2e26544c8a0c35372066012ec8310332dbf50c0da3b83e53fd861",
   "cli_version": "v1.1.2"
 }

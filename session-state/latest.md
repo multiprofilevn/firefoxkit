@@ -1,10 +1,10 @@
 # Session State
-<!-- Generated: 2026-07-19T23:30:40.319Z -->
+<!-- Generated: 2026-07-21T15:29:32.993Z -->
 <!-- Branch: unknown -->
 <!-- Plan: none -->
 
 ## What Worked (Verified)
-- Đã chạm: .claudekit.lock, session-state/archive/20260625-0333.md, session-state/archive/20260625-0338.md, session-state/archive/20260625-0440.md, session-state/archive/20260625-0608.md
+- Đã chạm: integration_stress_move_test.go, session-state/archive/20260719-1625.md, session-state/archive/20260719-1626.md, session-state/archive/20260719-1800.md, session-state/archive/20260719-1938.md
 
 ## What's Left
 - (All tasks completed)
@@ -72,24 +72,76 @@
 ## Agent Result: code-reviewer (11:03:57)
 - Đã cook xong toàn bộ 8 phase. Tóm tắt trạng thái hiện tại: ## Đã hoàn thành **Audit → Plan → Cook** cho toàn bộ findings leak/race của firefoxkit. ...
 
+
+## Agent Result: general-purpose (12:59:53)
+- Tôi tự verify thêm được một điểm quan trọng ngay (không chờ agent): **Write trên WebSocket dùng chung KHÔNG phải nút thắt của move chậm.** `coder/w...
+
+
+## Agent Result: general-purpose (13:00:05)
+- Tôi tự verify thêm được một điểm quan trọng ngay (không chờ agent): **Write trên WebSocket dùng chung KHÔNG phải nút thắt của move chậm.** `coder/w...
+
+
+## Agent Result: general-purpose (13:00:44)
+- 2/3 xong. Agent BiDi client tìm 2 nguyên nhân **degrade dần theo thời gian** (audit cũ bỏ sót): - **F1 (HIGH):** base ctx `context.WithCancel(conte...
+
+
+## Agent Result: developer (13:43:04)
+- Phase 1 (F1) đang được developer agent (**Fable**) cook nền theo TDD. Vì phase 2 (F2) cũng đụng package `internal/bidi`, tôi chạy **tuần tự** — chờ...
+
+
+## Agent Result: developer (13:49:22)
+- Phase 2 (F2) đang cook nền (**Fable**), gồm cả httptest WS thật (tag `wsintegration`). Phase 3 (L1) đụng file khác (`browser_context_lifecycle.go`,...
+
+
+## Agent Result: developer (14:00:16)
+- Chưa xong bro — Phase 3 (L1) vẫn đang chạy nền, tôi chưa nhận thông báo hoàn tất. Trạng thái hiện tại: - ✅ **Phase 1 (F1 timeout)** — xong, xanh, `...
+
+
+## Agent Result: code-reviewer (14:06:39)
+- 3 phase đã code xong, toàn repo `-race` xanh (state 3/5). `code-reviewer` đang soi diff concurrency của cả 3 phase (focus: race/deadlock/goroutine-...
+
+
+## Agent Result: developer (14:35:29)
+- Đang fix cả 2 finding bằng Fable (TDD): - **F-CR1:** bounded graceful close — cap wait bằng `gracefulCloseBudget ~2s`, luôn `client.Close()` để gỡ ...
+
+
+## Agent Result: git-manager (14:38:31)
+- Đang commit qua git-manager (stage đúng file hardening + plan docs, **bỏ** session-state churn, giữ nguyên `master`). Chờ xong tôi báo hash + tóm t...
+
+
+## Agent Result: developer (15:02:43)
+- Phase 4 (`WithCursorTuning`) đang cook nền (Opus, TDD unit test). Chờ xong tôi verify + update state → sang Phase 5 (stress harness, tag `stress` —...
+
+
+## Agent Result: developer (15:09:48)
+- Phase 5 đang cook + **chạy đo thật** trên Firefox 149 (K=20 đại diện fleet 200). Harness đo: bảng latency Human/Fast/Machine, tỉ số serialize "50 g...
+
+
+## Agent Result: git-manager (15:13:20)
+- Đang commit phase 4–5. Trong lúc chờ, tóm tắt phát hiện lớn nhất từ số đo thật (đã ghi vào audit report + README + memory): **Trả lời câu hỏi mấu c...
+
+
+## Agent Result: developer (15:19:05)
+- Đang chạy `TestStress_Fleet_MoveLatency` — **spawn 25 Firefox process riêng** (headless), đo: - **Baseline** 1 browser (move p50) - **Fleet 25 proc...
+
 ## Key Files Modified
-- .claudekit.lock
-- session-state/archive/20260625-0333.md
-- session-state/archive/20260625-0338.md
-- session-state/archive/20260625-0440.md
-- session-state/archive/20260625-0608.md
-- session-state/archive/20260625-0736.md
+- integration_stress_move_test.go
+- session-state/archive/20260719-1625.md
+- session-state/archive/20260719-1626.md
+- session-state/archive/20260719-1800.md
+- session-state/archive/20260719-1938.md
+- session-state/archive/20260720-0630.md
 - session-state/latest.md
-- browser_launch.go
-- browser_launch_url_test.go
-- browser.go
-- browser_connect.go
-- browser_context_lifecycle.go
-- browser_context_lifecycle_test.go
-- browser_launch_profile_test.go
-- concurrency_hardening_test.go
-- docs/architecture.md
-- input/backend_bidi_mousepath.go
+- README.md
 - input/cursor_engine.go
-- input/cursor_path_batch_test.go
-- input/cursor_remote.go
+- input/cursor_path.go
+- input/cursor_tuning.go
+- input/cursor_tuning_test.go
+- options.go
+- page_input_backend.go
+- plans/260721-1950-firefoxkit-load-hardening/.cook-state.json
+- plans/260721-1950-firefoxkit-load-hardening/phase-04-perf-adaptive-cursor-knob.md
+- plans/260721-1950-firefoxkit-load-hardening/phase-05-stress-harness-empirical.md
+- plans/260721-1950-firefoxkit-load-hardening/plan.md
+- plans/260721-1950-firefoxkit-load-hardening/reports/developer-260721-2158-perf-cursor-tuning-report.md
+- plans/260721-1950-firefoxkit-load-hardening/reports/developer-260721-2203-stress-harness-empirical-report.md
