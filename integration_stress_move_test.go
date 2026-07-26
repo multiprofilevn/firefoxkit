@@ -360,12 +360,18 @@ func fleetSize(t *testing.T) int {
 
 // launchFleet launches n SEPARATE Firefox processes (n distinct Browser
 // instances), each with one about:blank page, staggering launches slightly
-// to avoid a launch stampede. Aborts loudly on any Launch/Navigate error
-// (never silently skips a fleet member). Returns all browsers; caller must
-// Close every one — this helper itself defers-closes on any partial failure
-// so a mid-fleet abort still cleans up what was already launched.
-func launchFleet(t *testing.T, ff string, n int, profile firefoxkit.CursorProfile) []*firefoxkit.Browser {
+// to avoid a launch stampede. Headed launches stagger longer — a headed
+// window is much heavier to bring up than a headless one. Aborts loudly on
+// any Launch/Navigate error (never silently skips a fleet member). Returns
+// all browsers; caller must Close every one — this helper itself
+// defers-closes on any partial failure so a mid-fleet abort still cleans up
+// what was already launched.
+func launchFleet(t *testing.T, ff string, n int, profile firefoxkit.CursorProfile, headless bool) []*firefoxkit.Browser {
 	t.Helper()
+	stagger := 50 * time.Millisecond
+	if !headless {
+		stagger = 250 * time.Millisecond
+	}
 	browsers := make([]*firefoxkit.Browser, 0, n)
 	cleanup := func() {
 		for _, b := range browsers {
@@ -373,7 +379,7 @@ func launchFleet(t *testing.T, ff string, n int, profile firefoxkit.CursorProfil
 		}
 	}
 	for i := 0; i < n; i++ {
-		b, err := firefoxkit.Launch(ff, firefoxkit.WithHeadless(true), firefoxkit.WithCursorProfile(profile))
+		b, err := firefoxkit.Launch(ff, firefoxkit.WithHeadless(headless), firefoxkit.WithCursorProfile(profile))
 		if err != nil {
 			cleanup()
 			t.Fatalf("fleet launch %d/%d failed: %v", i+1, n, err)
@@ -383,7 +389,7 @@ func launchFleet(t *testing.T, ff string, n int, profile firefoxkit.CursorProfil
 			cleanup()
 			t.Fatalf("fleet navigate %d/%d failed: %v", i+1, n, err)
 		}
-		time.Sleep(50 * time.Millisecond) // stagger to avoid a launch stampede
+		time.Sleep(stagger) // stagger to avoid a launch stampede
 	}
 	return browsers
 }
@@ -402,7 +408,7 @@ func TestStress_Fleet_MoveLatency(t *testing.T) {
 	n := fleetSize(t)
 	t.Logf("fleet size N=%d (production reference: ~50 processes/user)", n)
 
-	fleet := launchFleet(t, ff, n, firefoxkit.CursorHuman)
+	fleet := launchFleet(t, ff, n, firefoxkit.CursorHuman, true)
 	defer func() {
 		for _, b := range fleet {
 			b.Close()
@@ -434,7 +440,7 @@ func TestStress_Fleet_MoveLatency(t *testing.T) {
 	for _, b := range fleet {
 		b.Close()
 	}
-	fastFleet := launchFleet(t, ff, n, firefoxkit.CursorFast)
+	fastFleet := launchFleet(t, ff, n, firefoxkit.CursorFast, true)
 	fleet = fastFleet // so the deferred cleanup above closes the right set
 	fastFleetDurs := runFleetMoves(t, fleet, movesPerBrowser)
 	fastStats := computeStats(fastFleetDurs)
