@@ -41,24 +41,30 @@ func (p *Page) headerInjectorLazy() *headerInjector {
 func (p *Page) SetExtraHeaders(headers map[string]string) error {
 	hi := p.headerInjectorLazy()
 
+	// Commit the map and pick the install/remove branch under the same
+	// installMu section: the last caller to hold installMu is then also the
+	// last to commit, so the intercept state always converges to the committed
+	// header set. Branching on the argument instead lets a remove that loses
+	// the lock race leave an interceptor pinned with an empty header set.
+	// Lock order is installMu → hi.mu, never the reverse.
+	hi.installMu.Lock()
+	defer hi.installMu.Unlock()
+
 	hi.mu.Lock()
 	hi.headers = make(map[string]string, len(headers))
 	for k, v := range headers {
 		hi.headers[k] = v
 	}
+	empty := len(hi.headers) == 0
+	installed := hi.interceptID != ""
 	hi.mu.Unlock()
 
-	hi.installMu.Lock()
-	defer hi.installMu.Unlock()
 	if p.cleanedUp.Load() {
 		return nil // page torn down — don't install an orphan interceptor
 	}
-	if len(headers) == 0 {
+	if empty {
 		return p.removeHeaderInterceptor(p.ctx())
 	}
-	hi.mu.RLock()
-	installed := hi.interceptID != ""
-	hi.mu.RUnlock()
 	if installed {
 		return nil
 	}
@@ -146,7 +152,18 @@ func (p *Page) removeHeaderInterceptor(ctx context.Context) error {
 	if id == "" {
 		return nil
 	}
-	return p.browser.client.RemoveIntercept(ctx, bidi.RemoveInterceptParams{Intercept: id})
+	// Drop the server-side subscription too, not just the intercept: without it
+	// Firefox keeps streaming network.beforeRequestSent for this context with no
+	// consumer until page cleanup, once per request.
+	p.untrackServerEvent("network.beforeRequestSent")
+	err := p.browser.client.RemoveIntercept(ctx, bidi.RemoveInterceptParams{Intercept: id})
+	if uerr := p.browser.client.UnsubscribeEvents(ctx, bidi.SubscribeParams{
+		Events:   []string{"network.beforeRequestSent"},
+		Contexts: []string{p.contextID},
+	}); uerr != nil && err == nil {
+		err = uerr
+	}
+	return err
 }
 
 func sortedHeaderKeys(m map[string]string) []string {
