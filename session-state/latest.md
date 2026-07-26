@@ -154,6 +154,10 @@
 ## Agent Result: git-manager (16:06:34)
 - Run xác nhận N=100 **headless** (120s workload) đang chạy nền — máy vẫn dùng được, dự kiến ~5-8 phút. Run này sẽ trả lời: leak goroutine + orphan l...
 
+
+## Agent Result: git-manager (16:44:13)
+- Run chẩn đoán **headed×100** đang chạy nền (100 cửa sổ sẽ hiện lên — đừng đụng máy nhé). Khác run trước, lần này harness có đủ đồ nghề chẩn đoán: -...
+
 ## Key Files Modified
 - plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/reports/leak-race-consolidated-findings-and-fix-proposals.md
 - session-state/archive/20260721-2226.md

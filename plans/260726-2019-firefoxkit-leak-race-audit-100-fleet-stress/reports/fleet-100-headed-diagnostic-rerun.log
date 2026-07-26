@@ -1,0 +1,92 @@
+=== RUN   TestStress_FleetWorkload
+    integration_stress_fleet_workload_test.go:223: fleet workload: N=100 headless=false duration=2m0s
+    integration_stress_fleet_workload_test.go:246: post-launch: goroutines=803 heapAllocMB=9 fleetParentRSSMB=609 allFirefoxRSSMB=76317 freePhysMB=79353
+    integration_stress_fleet_workload_test.go:269: sample t=18s goroutines=1004 heapAllocMB=10 sysMB=58 allFirefoxRSSMB=83777 freePhysMB=72534
+    integration_stress_fleet_workload_test.go:166: browser 45 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:166: browser 5 iter step navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:166: browser 13 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:166: browser 11 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:166: browser 85 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:166: browser 37 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:166: browser 66 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:166: browser 24 iter step newpage-navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:269: sample t=2m3s goroutines=980 heapAllocMB=17 sysMB=90 allFirefoxRSSMB=89047 freePhysMB=66759
+    integration_stress_fleet_workload_test.go:269: sample t=2m15s goroutines=905 heapAllocMB=13 sysMB=90 allFirefoxRSSMB=88842 freePhysMB=66256
+    integration_stress_fleet_workload_test.go:269: sample t=2m21s goroutines=904 heapAllocMB=14 sysMB=90 allFirefoxRSSMB=88731 freePhysMB=66416
+    integration_stress_fleet_workload_test.go:304: SUMMARY: iters=970 errors=8 goroutines before=3 after=237 heapAllocMB post-launch=9 post-close=6
+    integration_stress_fleet_workload_test.go:309: workload finished with 8 errors (see log)
+    integration_stress_fleet_workload_test.go:312: goroutine leak after fleet close: before=3 after=237 (delta=234 > 20)
+    integration_stress_fleet_workload_test.go:316: leaked goroutine profile (aggregated by stack):
+        goroutine profile: total 237
+        78 @ 0x140087c4e 0x14008f28e 0x1400b4065 0x1400c396e 0x1400ba49d 0x1400fe5f6 0x1400fcc1a 0x1400fe0ac 0x140108d0d 0x140108cea 0x1400eb8cf 0x1400eb38f 0x1401092ca 0x14010928f 0x1401091d0 0x1400eb254 0x1401b47bb 0x1401b4798 0x1401b5e3d 0x140092e01
+        #	0x14008f28d	syscall.syscalln+0x4d				C:/Program Files/Go/src/runtime/syscall_windows.go:431
+        #	0x1400b4064	syscall.SyscallN+0x44				C:/Program Files/Go/src/syscall/dll_windows.go:99
+        #	0x1400c396d	syscall.readFile+0x1ad				C:/Program Files/Go/src/syscall/zsyscall_windows.go:1030
+        #	0x1400ba49c	syscall.ReadFile+0x5c				C:/Program Files/Go/src/syscall/syscall_windows.go:510
+        #	0x1400fe5f5	internal/poll.(*FD).Read.func1+0xb5		C:/Program Files/Go/src/internal/poll/fd_windows.go:586
+        #	0x1400fcc19	internal/poll.(*FD).execIO+0x479		C:/Program Files/Go/src/internal/poll/fd_windows.go:304
+        #	0x1400fe0ab	internal/poll.(*FD).Read+0x44b			C:/Program Files/Go/src/internal/poll/fd_windows.go:585
+        #	0x140108d0c	os.(*File).read+0xac				C:/Program Files/Go/src/os/file_posix.go:29
+        #	0x140108ce9	os.(*File).Read+0x89				C:/Program Files/Go/src/os/file.go:144
+        #	0x1400eb8ce	io.discard.ReadFrom+0x8e			C:/Program Files/Go/src/io/io.go:666
+        #	0x1400eb38e	io.copyBuffer+0x20e				C:/Program Files/Go/src/io/io.go:415
+        #	0x1401092c9	io.Copy+0x49					C:/Program Files/Go/src/io/io.go:388
+        #	0x14010928e	os.genericWriteTo+0xe				C:/Program Files/Go/src/os/file.go:295
+        #	0x1401091cf	os.(*File).WriteTo+0x8f				C:/Program Files/Go/src/os/file.go:273
+        #	0x1400eb253	io.copyBuffer+0xd3				C:/Program Files/Go/src/io/io.go:411
+        #	0x1401b47ba	io.Copy+0x5a					C:/Program Files/Go/src/io/io.go:388
+        #	0x1401b4797	os/exec.(*Cmd).writerDescriptor.func1+0x37	C:/Program Files/Go/src/os/exec/exec.go:602
+        #	0x1401b5e3c	os/exec.(*Cmd).Start.func2+0x3c			C:/Program Files/Go/src/os/exec/exec.go:757
+        
+        78 @ 0x140087c4e 0x14008f28e 0x1400b4065 0x1400c396e 0x1400ba49d 0x1400fe5f6 0x1400fcc1a 0x1400fe0ac 0x140108d0d 0x140108cea 0x1401a7d6b 0x140527850 0x140092e01
+        #	0x14008f28d	syscall.syscalln+0x4d						C:/Program Files/Go/src/runtime/syscall_windows.go:431
+        #	0x1400b4064	syscall.SyscallN+0x44						C:/Program Files/Go/src/syscall/dll_windows.go:99
+        #	0x1400c396d	syscall.readFile+0x1ad						C:/Program Files/Go/src/syscall/zsyscall_windows.go:1030
+        #	0x1400ba49c	syscall.ReadFile+0x5c						C:/Program Files/Go/src/syscall/syscall_windows.go:510
+        #	0x1400fe5f5	internal/poll.(*FD).Read.func1+0xb5				C:/Program Files/Go/src/internal/poll/fd_windows.go:586
+        #	0x1400fcc19	internal/poll.(*FD).execIO+0x479				C:/Program Files/Go/src/internal/poll/fd_windows.go:304
+        #	0x1400fe0ab	internal/poll.(*FD).Read+0x44b					C:/Program Files/Go/src/internal/poll/fd_windows.go:585
+        #	0x140108d0c	os.(*File).read+0xac						C:/Program Files/Go/src/os/file_posix.go:29
+        #	0x140108ce9	os.(*File).Read+0x89						C:/Program Files/Go/src/os/file.go:144
+        #	0x1401a7d6a	bufio.(*Scanner).Scan+0xbea					C:/Program Files/Go/src/bufio/scan.go:219
+        #	0x14052784f	github.com/tuwibu/firefoxkit.discoverBiDiURL.func1+0x68f	D:/code/tu/automation/firefoxkit/browser_launch.go:323
+        
+        78 @ 0x14008b1ae 0x140018d0f 0x140018892 0x1401b7205 0x1401b6c45 0x1405240af 0x140092e01
+        #	0x1401b7204	os/exec.(*Cmd).awaitGoroutines+0x3a4		C:/Program Files/Go/src/os/exec/exec.go:981
+        #	0x1401b6c44	os/exec.(*Cmd).Wait+0x2a4			C:/Program Files/Go/src/os/exec/exec.go:948
+        #	0x1405240ae	github.com/tuwibu/firefoxkit.Launch.func2+0x2e	D:/code/tu/automation/firefoxkit/browser_launch.go:136
+        
+        1 @ 0x140047491 0x140089edd 0x14024228a 0x140242066 0x14023d6a4 0x1405658c5 0x14019770b 0x140092e01
+        #	0x140242289	runtime/pprof.writeRuntimeProfile+0xc9					C:/Program Files/Go/src/runtime/pprof/pprof.go:851
+        #	0x140242065	runtime/pprof.writeGoroutine+0x85					C:/Program Files/Go/src/runtime/pprof/pprof.go:784
+        #	0x14023d6a3	runtime/pprof.(*Profile).WriteTo+0x1a3					C:/Program Files/Go/src/runtime/pprof/pprof.go:408
+        #	0x1405658c4	github.com/tuwibu/firefoxkit_test.TestStress_FleetWorkload+0x1104	D:/code/tu/automation/firefoxkit/integration_stress_fleet_workload_test.go:315
+        #	0x14019770a	testing.tRunner+0x1ca							C:/Program Files/Go/src/testing/testing.go:2036
+        
+        1 @ 0x14008b1ae 0x140018d0f 0x140018892 0x140199436 0x14019da05 0x14019770b 0x14019d838 0x14019adac 0x1405701e5 0x140053a87 0x140092e01
+        #	0x140199435	testing.(*T).Run+0xb55		C:/Program Files/Go/src/testing/testing.go:2109
+        #	0x14019da04	testing.runTests.func1+0x84	C:/Program Files/Go/src/testing/testing.go:2585
+        #	0x14019770a	testing.tRunner+0x1ca		C:/Program Files/Go/src/testing/testing.go:2036
+        #	0x14019d837	testing.runTests+0x9f7		C:/Program Files/Go/src/testing/testing.go:2583
+        #	0x14019adab	testing.(*M).Run+0xf4b		C:/Program Files/Go/src/testing/testing.go:2443
+        #	0x1405701e4	main.main+0x164			_testmain.go:358
+        #	0x140053a86	runtime.main+0x2c6		C:/Program Files/Go/src/runtime/proc.go:290
+        
+        1 @ 0x14008b1ae 0x14004a9b7 0x14008a265 0x1400fb851 0x1400fc3e7 0x1400fcd05 0x1401006f5 0x140100d05 0x1402d3b85 0x1402efa4e 0x1402edf85 0x14047eb10 0x14051f133 0x140092e01
+        #	0x14008a264	internal/poll.runtime_pollWait+0x84		C:/Program Files/Go/src/runtime/netpoll.go:351
+        #	0x1400fb850	internal/poll.(*pollDesc).wait+0xb0		C:/Program Files/Go/src/internal/poll/fd_poll_runtime.go:84
+        #	0x1400fc3e6	internal/poll.(*FD).waitIO+0x106		C:/Program Files/Go/src/internal/poll/fd_windows.go:228
+        #	0x1400fcd04	internal/poll.(*FD).execIO+0x564		C:/Program Files/Go/src/internal/poll/fd_windows.go:311
+        #	0x1401006f4	internal/poll.(*FD).acceptOne+0xf4		C:/Program Files/Go/src/internal/poll/fd_windows.go:1129
+        #	0x140100d04	internal/poll.(*FD).Accept+0x3a4		C:/Program Files/Go/src/internal/poll/fd_windows.go:1164
+        #	0x1402d3b84	net.(*netFD).accept+0x84			C:/Program Files/Go/src/net/fd_windows.go:202
+        #	0x1402efa4d	net.(*TCPListener).accept+0x4d			C:/Program Files/Go/src/net/tcpsock_posix.go:159
+        #	0x1402edf84	net.(*TCPListener).Accept+0x64			C:/Program Files/Go/src/net/tcpsock.go:387
+        #	0x14047eb0f	net/http.(*Server).Serve+0x60f			C:/Program Files/Go/src/net/http/server.go:3434
+        #	0x14051f132	net/http/httptest.(*Server).goServe.func1+0xb2	C:/Program Files/Go/src/net/http/httptest/server.go:341
+        
+    integration_stress_fleet_workload_test.go:326: orphan firefox processes after fleet close: before=0 after=125
+--- FAIL: TestStress_FleetWorkload (976.14s)
+FAIL
+exit status 1
+FAIL	github.com/tuwibu/firefoxkit	977.943s
