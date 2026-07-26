@@ -33,14 +33,21 @@ cost nothing.
 Backend interface + two implementations:
 
 - `BackendBiDi` — issues `input.performActions` on the BiDi client. Default.
-  Works headless, works with hidden tabs.
+  Works headless, works with hidden tabs. Multiple pages/browsers can gesture
+  in parallel (Firefox parallelizes across browsing contexts).
 - `BackendNative` — Windows-only. Drives the OS cursor + keyboard via
   `winapi.SendInput`. Bypasses `isTrusted=false` fingerprinting at the cost
-  of requiring a visible focused window.
+  of requiring a visible focused window. **Atomic per-gesture:** all gestures
+  (move→down→up, click, drag, tap, scroll) across ALL native browsers in the
+  process are serialized by a package-level gesture lock. With N concurrent
+  native browsers (production max 9), native input serializes per gesture
+  (single OS cursor is the bottleneck). This is by design — there is only one
+  desktop pointer; gestures must not interleave.
 
 Selection happens per-Page via `Browser.cfg.inputBackend`. The same Backend
 interface lets `Keyboard` (TypeHuman algorithm) and `Cursor` (Bezier path)
-layer human-like behavior on top.
+layer human-like behavior on top. BiDi backend is unaffected and remains
+parallel.
 
 ## BiDi client (`internal/bidi/`)
 
@@ -88,6 +95,34 @@ Same as Launch but skips steps 1-5: assumes Firefox already listening on
 the user-supplied port. `Close()` does NOT terminate the Firefox process
 (b.closeProc == false).
 
+## Close flow (Launch path)
+
+Shutdown is graceful but bounded. Three phases execute in order:
+
+1. **Graceful quit (~2s budget):** BiDi `browser.close` RPC is best-effort,
+   issued on a separate goroutine because WebSocket writes do not honor caller
+   ctx. Firefox uses this to flush its profile and tear down its own content
+   processes. Best-effort only — a hung peer does not hold Close hostage.
+2. **Cleanup sweep & drainer join (~2s budget):** per-page cleanup RPCs and
+   the drainer goroutines are signaled and waited. Runs BEFORE the BiDi client
+   tears down so its RemoveIntercept/Unsubscribe RPCs still reach Firefox.
+   Against a quitting peer these RPCs often fail; they are best-effort and
+   logged.
+3. **Process tree reap (~5s timeout):** The Firefox process tree is killed via
+   Windows Job Object (created at spawn with KILL_ON_JOB_CLOSE flag; takes the
+   whole tree when the handle closes) or fallback `taskkill /T /F`. Close
+   blocks until the process actually exits (verified by observing the cmd.Wait
+   owner's done signal) — success is not just a kill request, it is proof of
+   exit. If the tree survives the kill, Close returns `"firefox pid=N survived kill"`.
+
+Worst case is roughly 9-11s (one 2s budget for graceful + one 2s budget for
+sweep + one 5s timeout for reap). Typical healthy shutdown is milliseconds
++ process exit latency.
+
+On the Connect path (step 0 only), Close does NOT send `browser.close` or
+kill anything, it just disconnects the BiDi client and lets Firefox keep
+running.
+
 ## Event dispatch (bounded per-subscription workers)
 
 `internal/bidi` delivers events off the reader goroutine: each `Subscribe`
@@ -116,7 +151,9 @@ Fixes that keep a long-lived automation process flat (plan 260719-1620):
   from `b.pages` and cleaned up.
 - `Page.cleanup` is idempotent and also `session.unsubscribe`s the per-context
   events it registered, and issues `input.releaseActions` to clear any held
-  modifier keys.
+  modifier keys. Local teardown always runs; under drainer saturation (>512
+  pending cleanups) the RPC half is dropped (counter logged via Close) but
+  page tracking stays correct.
 - `QuerySelectorAll`/`QuerySelector` disown the ownership=root handles they
   create so Firefox doesn't pin result objects forever.
 - Temp profile dirs are removed by `Browser.Close` (not just on the Launch
@@ -135,14 +172,30 @@ large-payload calls a generous timeout. Documented, not worked around (see
 
 ## Stress / leak-test suite
 
-`integration_stress_test.go` (build tag `stress`) verifies the leak fixes
-against a real Firefox 129+. Not part of the default `go test`. Run manually:
+Build tag `stress` — not part of default `go test`. Several tests verify the
+leak fixes against a real Firefox 129+ on a dev machine. Run manually:
 
-```
+```bash
+# Core leak tests (20 min)
 FIREFOXKIT_FIREFOX_PATH=/path/to/firefox go test -tags stress -race -run Stress -v -timeout 20m
+
+# Mixed-workload fleet (N browsers, realistic load)
+FIREFOXKIT_FIREFOX_PATH=/path/to/firefox \
+  FIREFOXKIT_FLEET_N=100 FIREFOXKIT_HEADED=1 FIREFOXKIT_WORKLOAD_SECONDS=300 \
+  go test -tags stress -race -run TestStress_FleetWorkload -v -timeout 60m
 ```
 
-Covers: goroutine leak on Launch/Close churn, Firefox-side RSS after 1000
-`QuerySelectorAll` calls, tab-churn page pruning, console-flood goroutine
-bound, and temp-profile-dir cleanup. Each test skips when
-`FIREFOXKIT_FIREFOX_PATH` is unset.
+**Core tests** (`integration_stress_test.go`): goroutine leak on Launch/Close
+churn, Firefox-side RSS after 1000 `QuerySelectorAll` calls, tab-churn page
+pruning, console-flood goroutine bound, temp-profile-dir cleanup.
+
+**Fleet workload** (`integration_stress_fleet_workload_test.go`): N separate
+Firefox processes each running a mixed automation loop (navigate → evaluate →
+click → type → tab churn → screenshot) while a sampler tracks goroutines, Go
+heap, and total Firefox RSS over time. Knobs: `FIREFOXKIT_FLEET_N` (default
+25), `FIREFOXKIT_HEADED` (default headless), `FIREFOXKIT_WORKLOAD_SECONDS`
+(default 180), `FIREFOXKIT_NAV_TIMEOUT_SECONDS` (bounds single Navigate, default
+derived from fleet size). Safety valve: aborts if available physical memory
+drops below 8 GB.
+
+Each test skips when `FIREFOXKIT_FIREFOX_PATH` is unset.
