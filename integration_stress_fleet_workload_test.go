@@ -34,9 +34,13 @@ import (
 	"github.com/tuwibu/firefoxkit"
 )
 
+// workloadNavTimeout bounds a single Navigate under heavy fleet load.
+// Overridable via FIREFOXKIT_NAV_TIMEOUT_SECONDS: the launch stampede of a
+// large headed fleet produces oversubscription latency (not a leak), so
+// verify runs use a wider bound to keep that noise out of the error count.
+var workloadNavTimeout = 20 * time.Second
+
 const (
-	// workloadNavTimeout bounds a single Navigate under heavy fleet load.
-	workloadNavTimeout = 20 * time.Second
 	// samplerInterval is how often the sampler logs goroutine/heap/RSS.
 	samplerInterval = 15 * time.Second
 	// minFreePhysKB is the safety valve: abort when available physical
@@ -220,6 +224,13 @@ func TestStress_FleetWorkload(t *testing.T) {
 	n := fleetSize(t)
 	headless := !headedFromEnv()
 	dur := workloadDuration(t)
+	if v := os.Getenv("FIREFOXKIT_NAV_TIMEOUT_SECONDS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			t.Fatalf("FIREFOXKIT_NAV_TIMEOUT_SECONDS=%q invalid: %v", v, err)
+		}
+		workloadNavTimeout = time.Duration(n) * time.Second
+	}
 	t.Logf("fleet workload: N=%d headless=%v duration=%v", n, headless, dur)
 
 	srv := workloadServer()
