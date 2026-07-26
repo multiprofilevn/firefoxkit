@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "F2 write-teardown guard"
-status: pending
+status: completed
 priority: P1
 effort: "2h"
 test-strategy: tdd

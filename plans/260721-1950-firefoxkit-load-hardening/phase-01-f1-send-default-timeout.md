@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "F1 Send default timeout"
-status: pending
+status: completed
 priority: P1
 effort: "3h"
 test-strategy: tdd

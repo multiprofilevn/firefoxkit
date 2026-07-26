@@ -1,7 +1,7 @@
 ---
 title: "firefoxkit load hardening (leak/race/perf under 200-thread)"
 description: ""
-status: pending
+status: done
 priority: P1
 branch: "master"
 tags: []
@@ -28,9 +28,9 @@ stress/concurrency hiện có. YAGNI/KISS: không thêm knob/tối ưu chưa có
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [F1 Send default timeout](./phase-01-f1-send-default-timeout.md) | Pending |
-| 2 | [F2 write-teardown guard](./phase-02-f2-write-teardown-guard.md) | Pending |
-| 3 | [L1 non-blocking context prune](./phase-03-l1-non-blocking-context-prune.md) | Pending |
+| 1 | [F1 Send default timeout](./phase-01-f1-send-default-timeout.md) | Completed |
+| 2 | [F2 write-teardown guard](./phase-02-f2-write-teardown-guard.md) | Completed |
+| 3 | [L1 non-blocking context prune](./phase-03-l1-non-blocking-context-prune.md) | Completed |
 | 4 | [PERF adaptive cursor knob](./phase-04-perf-adaptive-cursor-knob.md) | Completed |
 | 5 | [Stress harness empirical](./phase-05-stress-harness-empirical.md) | Completed |
 

@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "L1 non-blocking context prune"
-status: pending
+status: completed
 priority: P1
 effort: "4h"
 test-strategy: tdd
