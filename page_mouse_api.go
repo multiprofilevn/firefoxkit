@@ -1,6 +1,7 @@
 package firefoxkit
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -130,9 +131,15 @@ func (m *MouseAPI) Hover(selector string) error {
 
 // Scroll dispatches a wheel event with the given deltas. The origin is the last
 // known cursor position, or the viewport center if the cursor has not been moved.
+// Takes the gesture lock: the native wheel lands wherever the shared OS pointer
+// currently is, so it must not fire inside another Browser's gesture. The origin
+// is resolved BEFORE the lock — scrollOrigin may hit the browser over BiDi.
 func (m *MouseAPI) Scroll(deltaX, deltaY float64) error {
 	x, y := m.scrollOrigin()
-	return m.p.inputBackend().MouseScroll(m.p.ctx(), x, y, deltaX, deltaY)
+	b := m.p.inputBackend()
+	return input.WithGesture(m.p.ctx(), b, func(ctx context.Context) error {
+		return b.MouseScroll(ctx, x, y, deltaX, deltaY)
+	})
 }
 
 // scrollOrigin returns the wheel origin: last cursor pos, else viewport center.
@@ -156,35 +163,48 @@ func (m *MouseAPI) scrollOrigin() (float64, float64) {
 // points, then releases at (toX,toY). The approach glide makes the gesture
 // human-like; the press-hold-move portion stays on the raw backend because a
 // button must remain held across the intermediate moves.
+//
+// The whole sequence runs inside one gesture (input.WithGesture): on the native
+// backend another Browser must not move the shared OS pointer between the grab
+// and the drop. Every release goes through input.ReleaseCtx so a caller ctx
+// that dies mid-drag still lifts the button.
 func (m *MouseAPI) Drag(fromX, fromY, toX, toY float64) error {
 	b := m.p.inputBackend()
-	ctx := m.p.ctx()
-	// Glide to the grab point before pressing (matches click behavior).
-	if err := m.p.cursorEngine().MoveTo(ctx, fromX, fromY); err != nil {
-		return err
-	}
-	if err := b.MouseDown(ctx, fromX, fromY, input.MouseLeft); err != nil {
-		return err
-	}
-	dx := (toX - fromX) / float64(dragSteps+1)
-	dy := (toY - fromY) / float64(dragSteps+1)
-	for i := 1; i <= dragSteps; i++ {
-		if err := b.MouseMove(ctx, fromX+dx*float64(i), fromY+dy*float64(i)); err != nil {
-			_ = b.MouseUp(ctx, fromX+dx*float64(i), fromY+dy*float64(i), input.MouseLeft)
+	return input.WithGesture(m.p.ctx(), b, func(ctx context.Context) error {
+		release := func(x, y float64) {
+			rctx, cancel := input.ReleaseCtx(ctx)
+			_ = b.MouseUp(rctx, x, y, input.MouseLeft)
+			cancel()
+		}
+		// Glide to the grab point before pressing (matches click behavior).
+		if err := m.p.cursorEngine().MoveTo(ctx, fromX, fromY); err != nil {
 			return err
 		}
-	}
-	if err := b.MouseMove(ctx, toX, toY); err != nil {
-		_ = b.MouseUp(ctx, toX, toY, input.MouseLeft)
-		return err
-	}
-	m.setLast(toX, toY)
-	// Sync the cursor engine to the drag end-point — the press-hold-move above
-	// bypassed it, so without this the next glide would seed from the drag
-	// source (visible backward jump on the BiDi backend, which has no OS cursor
-	// to re-seed from).
-	m.p.cursorEngine().SetPosition(toX, toY)
-	return b.MouseUp(ctx, toX, toY, input.MouseLeft)
+		if err := b.MouseDown(ctx, fromX, fromY, input.MouseLeft); err != nil {
+			return err
+		}
+		dx := (toX - fromX) / float64(dragSteps+1)
+		dy := (toY - fromY) / float64(dragSteps+1)
+		for i := 1; i <= dragSteps; i++ {
+			if err := b.MouseMove(ctx, fromX+dx*float64(i), fromY+dy*float64(i)); err != nil {
+				release(fromX+dx*float64(i), fromY+dy*float64(i))
+				return err
+			}
+		}
+		if err := b.MouseMove(ctx, toX, toY); err != nil {
+			release(toX, toY)
+			return err
+		}
+		m.setLast(toX, toY)
+		// Sync the cursor engine to the drag end-point — the press-hold-move
+		// above bypassed it, so without this the next glide would seed from the
+		// drag source (visible backward jump on the BiDi backend, which has no
+		// OS cursor to re-seed from).
+		m.p.cursorEngine().SetPosition(toX, toY)
+		rctx, cancel := input.ReleaseCtx(ctx)
+		defer cancel()
+		return b.MouseUp(rctx, toX, toY, input.MouseLeft)
+	})
 }
 
 // DragAndDrop resolves fromSel and toSel to their center points then drags.

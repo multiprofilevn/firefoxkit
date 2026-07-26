@@ -17,6 +17,10 @@ import (
 // click with another's keystroke. chromefleet additionally serializes at the
 // fleet level, making this a no-op in that case — leaving it in keeps the
 // safety net for callers who use chromekit standalone.
+//
+// It is per-syscall and therefore NOT enough on its own: composite gestures
+// take nativeGestureMu (see gesture.go) around the whole move→press→release.
+// Lock order is gesture → input; never the reverse.
 var nativeInputMu sync.Mutex
 
 const (
@@ -89,6 +93,12 @@ func newNative(cfg Config) Backend {
 	}
 	return &nativeBackend{win: w}
 }
+
+// lockGesture / unlockGesture make every native backend in the process share
+// ONE gesture lock — they all drive the same desktop pointer, so a gesture from
+// browser A must complete before browser B starts moving the cursor.
+func (n *nativeBackend) lockGesture()   { nativeGestureMu.Lock() }
+func (n *nativeBackend) unlockGesture() { nativeGestureMu.Unlock() }
 
 func (n *nativeBackend) toScreen(x, y float64) (int32, int32) {
 	sx, sy := cssToScreen(x, y, n.win)
@@ -337,4 +347,7 @@ func sendKey(scan uint16, flags uint32) error {
 	return nil
 }
 
-var _ Backend = (*nativeBackend)(nil)
+var (
+	_ Backend       = (*nativeBackend)(nil)
+	_ gestureLocker = (*nativeBackend)(nil)
+)

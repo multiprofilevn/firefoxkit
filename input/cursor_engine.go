@@ -90,10 +90,15 @@ type cursorSeeder interface {
 
 // MoveTo glides from the current position to (x, y). Behavior depends on the
 // configured profile (ProfileHuman by default).
+//
+// Takes the gesture lock first, then c.mu — every composite here must acquire
+// in that order or two Cursors sharing the OS pointer can deadlock.
 func (c *Cursor) MoveTo(ctx context.Context, x, y float64) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.moveToLocked(ctx, x, y)
+	return WithGesture(ctx, c.backend, func(ctx context.Context) error {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.moveToLocked(ctx, x, y)
+	})
 }
 
 // moveToLocked is MoveTo's body; caller must hold c.mu.
@@ -191,30 +196,38 @@ func withDelays(pts []Point, next func() int) []PathPoint {
 }
 
 // Click moves to (x, y) and performs a press/release with a random hold time.
+// The whole move→press→release runs as one gesture, so another Browser sharing
+// the OS pointer cannot move the cursor away between the glide and the press.
 func (c *Cursor) Click(ctx context.Context, x, y float64, b MouseButton) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.moveToLocked(ctx, x, y); err != nil {
-		return err
-	}
-	if err := c.backend.MouseDown(ctx, x, y, b); err != nil {
-		return err
-	}
-	if err := sleepCtx(ctx, time.Duration(80+rand.Intn(50))*time.Millisecond); err != nil {
-		// Never leave the button pressed on cancellation — the caller ctx is
-		// already dead, so release on a short background ctx.
-		rctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_ = c.backend.MouseUp(rctx, x, y, b)
-		cancel()
-		return err
-	}
-	return c.backend.MouseUp(ctx, x, y, b)
+	return WithGesture(ctx, c.backend, func(ctx context.Context) error {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if err := c.moveToLocked(ctx, x, y); err != nil {
+			return err
+		}
+		if err := c.backend.MouseDown(ctx, x, y, b); err != nil {
+			return err
+		}
+		if err := sleepCtx(ctx, time.Duration(80+rand.Intn(50))*time.Millisecond); err != nil {
+			// Never leave the button pressed on cancellation — the caller ctx
+			// is already dead, so release on a short background ctx.
+			rctx, cancel := ReleaseCtx(ctx)
+			_ = c.backend.MouseUp(rctx, x, y, b)
+			cancel()
+			return err
+		}
+		return c.backend.MouseUp(ctx, x, y, b)
+	})
 }
 
-// Scroll dispatches a wheel event from the cursor's current position.
+// Scroll dispatches a wheel event from the cursor's current position. Held in
+// the gesture lock too: the native wheel lands wherever the OS pointer happens
+// to be, so it must not fire in the middle of another Browser's gesture.
 func (c *Cursor) Scroll(ctx context.Context, deltaX, deltaY float64) error {
-	c.mu.Lock()
-	x, y := c.x, c.y
-	c.mu.Unlock()
-	return c.backend.MouseScroll(ctx, x, y, deltaX, deltaY)
+	return WithGesture(ctx, c.backend, func(ctx context.Context) error {
+		c.mu.Lock()
+		x, y := c.x, c.y
+		c.mu.Unlock()
+		return c.backend.MouseScroll(ctx, x, y, deltaX, deltaY)
+	})
 }
