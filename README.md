@@ -98,6 +98,7 @@ b, _ := firefoxkit.Launch(
 | `WithProxy(addr)` | route Firefox through `host:port` proxy |
 | `WithInputBackend(t)` | `BackendBiDi` (default) or `BackendNative` |
 | `WithNativeWindow(x, y, scale)` | window offset + DPI for native backend |
+| `WithScaleFactor(f)` | force the profile's device-pixel ratio (`--force-device-scale-factor` equivalent), applied at launch via `user.js`; `f <= 0` keeps system DPI — pass the same value to `WithNativeWindow` when native clicks rely on it |
 | `WithCursorProfile(p)` | `CursorHuman` / `CursorFast` / `CursorMachine` (applies to both BiDi and Native) |
 | `WithCursorTuning(t)` | cap `ProfileHuman`'s step count / delay range (`input.CursorTuning`) — see "Cursor profile / load" below |
 | `WithFlag(key, value)` | pass arbitrary Firefox CLI flag |
@@ -105,6 +106,7 @@ b, _ := firefoxkit.Launch(
 | `WithModifyCmd(fn)` | hook `*exec.Cmd` before Firefox starts |
 | `WithLaunchTimeout(d)` | override 30s default for launch + session.new |
 | `WithCommandTimeout(d)` | override the 60s default backstop applied to BiDi commands whose context has no deadline (0 disables) |
+| `WithWriteTimeout(d)` | override the 10s budget for a single WebSocket frame write, mutex wait included — raise (~30s) for fleets pushing large payloads (0 restores the default) |
 | `WithPermissionsDefault(perm, allow)` | blanket allow/block at launch (no per-origin) |
 | `WithDownloadDir(dir)` | save downloads here (paired with WithAcceptDownloads) |
 | `WithAcceptDownloads(b)` | suppress download dialog |

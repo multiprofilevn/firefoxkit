@@ -61,12 +61,16 @@ type Options struct {
 	// then fails with ErrCommandTimeout instead of parking the goroutine for
 	// the browser lifetime. 0 disables the backstop.
 	DefaultCallTimeout time.Duration
+	// WriteTimeout bounds a single WebSocket frame write, including the wait
+	// for the shared write mutex. Expiry tears the connection down (see
+	// wsTransport.writeJSON). 0 uses defaultWriteTimeout.
+	WriteTimeout time.Duration
 }
 
 // Dial connects to the BiDi endpoint at url (e.g. ws://127.0.0.1:9222/session)
 // and starts the reader goroutine. Caller must Close() to release resources.
 func Dial(ctx context.Context, url string, opts Options) (*Client, error) {
-	t, err := dial(ctx, url, opts.HTTPClient)
+	t, err := dial(ctx, url, opts.HTTPClient, opts.WriteTimeout)
 	if err != nil {
 		return nil, err
 	}

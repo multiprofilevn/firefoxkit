@@ -37,7 +37,7 @@ type wsTransport struct {
 // dial opens a WebSocket to url. The Firefox BiDi endpoint is unauthenticated
 // localhost-only; we still pass a customizable HTTPClient so callers can plug
 // proxies in for testing.
-func dial(ctx context.Context, url string, httpClient *http.Client) (*wsTransport, error) {
+func dial(ctx context.Context, url string, httpClient *http.Client, writeTimeout time.Duration) (*wsTransport, error) {
 	opts := &websocket.DialOptions{HTTPClient: httpClient}
 	conn, _, err := websocket.Dial(ctx, url, opts)
 	if err != nil {
@@ -45,7 +45,7 @@ func dial(ctx context.Context, url string, httpClient *http.Client) (*wsTranspor
 	}
 	// BiDi messages can be large (screenshots base64). Bump from default 32K.
 	conn.SetReadLimit(64 * 1024 * 1024)
-	return &wsTransport{conn: conn}, nil
+	return &wsTransport{conn: conn, writeTimeout: writeTimeout}, nil
 }
 
 // writeJSON marshals v and writes it as one text frame.
@@ -63,13 +63,18 @@ func (t *wsTransport) writeJSON(_ context.Context, v any) error {
 	if err != nil {
 		return fmt.Errorf("bidi: marshal: %w", err)
 	}
-	wt := t.writeTimeout
-	if wt <= 0 {
-		wt = defaultWriteTimeout
-	}
-	wctx, cancel := context.WithTimeout(context.Background(), wt)
+	wctx, cancel := context.WithTimeout(context.Background(), t.effectiveWriteTimeout())
 	defer cancel()
 	return t.conn.Write(wctx, websocket.MessageText, data)
+}
+
+// effectiveWriteTimeout resolves the configured write budget, falling back to
+// defaultWriteTimeout when unset (0) or invalid.
+func (t *wsTransport) effectiveWriteTimeout() time.Duration {
+	if t.writeTimeout <= 0 {
+		return defaultWriteTimeout
+	}
+	return t.writeTimeout
 }
 
 func (t *wsTransport) readJSON(ctx context.Context, v any) error {

@@ -34,6 +34,7 @@ func Connect(port int, opts ...Option) (*Browser, error) {
 		HTTPClient:         http.DefaultClient,
 		Logger:             toBiDiLogger(cfg.logger),
 		DefaultCallTimeout: cfg.commandTimeout,
+		WriteTimeout:       cfg.writeTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: dial %s: %v", ErrBiDiSessionFailed, wsURL, err)

@@ -1,6 +1,48 @@
 package firefoxkit
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// TestWithScaleFactor_WritesDevPixelsPref: the pref is a CHAR pref in Firefox —
+// it must land in user.js as a quoted string, not a bare number.
+func TestWithScaleFactor_WritesDevPixelsPref(t *testing.T) {
+	cfg := defaultConfig()
+	WithScaleFactor(1.5)(cfg)
+	if got := cfg.prefs[prefDevPixelsPerPx]; got != "1.5" {
+		t.Fatalf("scale pref: got %#v, want \"1.5\"", got)
+	}
+	dir := t.TempDir()
+	if err := writeUserPrefs(dir, cfg, 0); err != nil {
+		t.Fatalf("writeUserPrefs: %v", err)
+	}
+	data := readFile(t, dir+"/user.js")
+	if !strings.Contains(data, `"layout.css.devPixelsPerPx", "1.5"`) {
+		t.Fatalf("scale pref missing from user.js:\n%s", data)
+	}
+}
+
+// TestWithScaleFactor_IntegralValue: 2 must serialize as "2", never "2.000000".
+func TestWithScaleFactor_IntegralValue(t *testing.T) {
+	cfg := defaultConfig()
+	WithScaleFactor(2)(cfg)
+	if got := cfg.prefs[prefDevPixelsPerPx]; got != "2" {
+		t.Fatalf("scale pref: got %#v, want \"2\"", got)
+	}
+}
+
+// TestWithScaleFactor_NonPositiveIgnored: <= 0 means "leave Firefox on system
+// DPI" — the pref must not be written at all (Firefox's own default is -1.0).
+func TestWithScaleFactor_NonPositiveIgnored(t *testing.T) {
+	for _, f := range []float64{0, -1, -2.5} {
+		cfg := defaultConfig()
+		WithScaleFactor(f)(cfg)
+		if _, ok := cfg.prefs[prefDevPixelsPerPx]; ok {
+			t.Fatalf("scale %g: pref must be absent, got %#v", f, cfg.prefs[prefDevPixelsPerPx])
+		}
+	}
+}
 
 func TestWithPermissionsDefault_Allow(t *testing.T) {
 	cfg := defaultConfig()

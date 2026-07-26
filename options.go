@@ -2,6 +2,7 @@ package firefoxkit
 
 import (
 	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/tuwibu/firefoxkit/input"
@@ -48,6 +49,7 @@ type config struct {
 	modifyCmd      func(*exec.Cmd)
 	launchTimeout  time.Duration
 	commandTimeout time.Duration
+	writeTimeout   time.Duration
 }
 
 func defaultConfig() *config {
@@ -111,6 +113,34 @@ func WithNativeWindow(x, y int, scale float64) Option {
 	}
 }
 
+// prefDevPixelsPerPx is Firefox's device-pixel ratio override — a CHAR pref, so
+// the value is written as a string ("1.5"). Firefox's own default is "-1.0" =
+// follow system DPI, which is what an unset pref means here.
+const prefDevPixelsPerPx = "layout.css.devPixelsPerPx"
+
+// WithScaleFactor forces the profile's device-pixel ratio (Chrome's
+// --force-device-scale-factor / --scale-factor equivalent). f <= 0 is ignored,
+// leaving Firefox on system DPI. Applied per profile at launch via user.js —
+// it cannot be changed at runtime.
+//
+// Interacts with the two native-window APIs, all three needed for the tiled
+// multi-window native setup:
+//   - WithNativeWindow(x, y, scale) — the scale the native backend uses to map
+//     CSS coords to screen pixels. Set it to the SAME value passed here when
+//     the live HWND measurement is unavailable, or clicks miss by that ratio.
+//     When measurement succeeds the real DPI scale wins over both.
+//   - Browser.SetWindowBounds — moves/resizes the window for tiling. Bounds are
+//     screen pixels and are NOT affected by this pref; only page content scales,
+//     so a higher factor fits less content into the same tile.
+func WithScaleFactor(f float64) Option {
+	return func(c *config) {
+		if f <= 0 {
+			return
+		}
+		c.prefs[prefDevPixelsPerPx] = strconv.FormatFloat(f, 'g', -1, 64)
+	}
+}
+
 func WithCursorProfile(p CursorProfile) Option {
 	return func(c *config) { c.cursorProfile = p }
 }
@@ -154,6 +184,24 @@ func WithCommandTimeout(d time.Duration) Option {
 	return func(c *config) {
 		if d >= 0 {
 			c.commandTimeout = d
+		}
+	}
+}
+
+// WithWriteTimeout overrides the default 10s budget for writing a single
+// WebSocket frame to the browser.
+//
+// The budget covers the whole write, including the wait for the shared write
+// mutex — a big frame already in flight eats into the next writer's budget.
+// When it expires the underlying library tears the connection down, not just
+// that write, so every in-flight command on the session fails. Raising it
+// (~30s) is the safer choice for fleets that push large payloads such as
+// screenshots or file uploads. Pass 0 to restore the default; negative values
+// are ignored.
+func WithWriteTimeout(d time.Duration) Option {
+	return func(c *config) {
+		if d >= 0 {
+			c.writeTimeout = d
 		}
 	}
 }
