@@ -1,15 +1,18 @@
 # Session State
-<!-- Generated: 2026-07-26T16:25:04.973Z -->
+<!-- Generated: 2026-07-26T19:36:26.181Z -->
 <!-- Branch: unknown -->
 <!-- Plan: none -->
 
 ## What Worked (Verified)
-- Phase 1: Static audit 4 zones parallel (4 code-reviewer agents + go vet/build/test -race baseline)
-- Phase 2: Fleet workload stress harness (extend launchFleet + new TestStress_FleetWorkload + smoke N=2)
+- Fix plan 260726-2323: Phase 1 process-tree reap + verify-dead (P1)
+- Fix plan: Phase 2 drainer drop-on-saturation
+- Fix plan: Phase 3 SetExtraHeaders race fix
+- Fix plan: Phase 4 write timeout knob
+- Fix plan: Phase 5 native gesture lock + scale-factor pref
 
 ## What's Left
-- [ ] Phase 3: Run 100 headed fleet on this machine (pre-flight + run + collect metrics)
-- [ ] Phase 4: Consolidated findings report (static × dynamic evidence, ranked fixes)
+- [ ] Review fixes F1-F3 (drop-path local cleanup + comments + README)
+- [ ] Fix plan: Phase 6 verify headed×100 clean
 
 ## Agent Result: developer (22:12:05)
 - "Tiếp tục hết" — rõ. Để giữ chất lượng qua 9 phase còn lại mà không cạn context, tôi delegate từng phase cho `developer` agent với spec chính xác (...
@@ -158,24 +161,60 @@
 ## Agent Result: git-manager (16:44:13)
 - Run chẩn đoán **headed×100** đang chạy nền (100 cửa sổ sẽ hiện lên — đừng đụng máy nhé). Khác run trước, lần này harness có đủ đồ nghề chẩn đoán: -...
 
+
+## Agent Result: git-manager (16:44:58)
+- Run chẩn đoán **headed×100** đang chạy nền (100 cửa sổ sẽ hiện lên — đừng đụng máy nhé). Khác run trước, lần này harness có đủ đồ nghề chẩn đoán: -...
+
+
+## Agent Result: developer (17:43:47)
+- Plan fix 6 phase đã viết xong. Handoff:
+
+
+## Agent Result: developer (17:51:56)
+- Plan fix 6 phase đã viết xong. Handoff:
+
+
+## Agent Result: developer (17:58:31)
+- Plan fix 6 phase đã viết xong. Handoff:
+
+
+## Agent Result: developer (18:04:33)
+- Plan fix 6 phase đã viết xong. Handoff:
+
+
+## Agent Result: developer (18:18:59)
+- Plan fix 6 phase đã viết xong. Handoff:
+
+
+## Agent Result: code-reviewer (18:27:46)
+- Toàn bộ gate xanh: `go vet`/`build` (thường + tag stress), **`go test -race ./...` full PASS**, smoke N=2 **cả headless lẫn headed** sạch tuyệt đối...
+
+
+## Agent Result: developer (18:36:31)
+- Đang chờ developer áp 3 fix từ review (F1 local-cleanup tại chỗ drop, F2/F3 comment, README row). Khi xong + gate xanh, tôi sẽ hỏi bạn lần cuối để ...
+
+
+## Agent Result: docs-manager (19:51:54)
+- Vẫn đang chạy — đã xong phần workload (2m), giờ đang ở **giai đoạn đóng 100 browser** (553 process firefox còn sống là fleet + con của nó đang chờ ...
+
 ## Key Files Modified
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/reports/leak-race-consolidated-findings-and-fix-proposals.md
-- session-state/archive/20260721-2226.md
-- session-state/archive/20260721-2229.md
-- session-state/latest.md
-- .claudekit.lock
-- plans/260721-1950-firefoxkit-load-hardening/phase-01-f1-send-default-timeout.md
-- plans/260721-1950-firefoxkit-load-hardening/phase-02-f2-write-teardown-guard.md
-- plans/260721-1950-firefoxkit-load-hardening/phase-03-l1-non-blocking-context-prune.md
-- plans/260721-1950-firefoxkit-load-hardening/plan.md
-- session-state/archive/20260726-2042.md
+- README.md
+- browser.go
+- browser_connect.go
+- browser_context_lifecycle.go
+- browser_context_lifecycle_load_test.go
+- browser_launch.go
+- concurrency_hardening_test.go
+- input/backend_native_windows.go
+- input/cursor_engine.go
+- input/touch.go
+- integration_stress_fleet_workload_test.go
+- internal/bidi/client.go
+- internal/bidi/transport.go
+- options.go
+- options_prefs_test.go
+- page.go
+- page_headers.go
+- page_mouse_api.go
 - session-state/archive/20260726-2202.md
 - session-state/archive/20260726-2247.md
-- docs/journals/journal-260726-2301-goroutine-orphan-leak-audit.md
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/.cook-state.json
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-01-static-audit-4-zones-parallel.md
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-02-fleet-workload-stress-harness.md
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-03-run-100-headed-fleet-on-this-machine.md
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-04-consolidated-findings-report.md
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/plan.md
-- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/reports/audit-z1-bidi-core.md
