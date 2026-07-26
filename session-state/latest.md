@@ -1,5 +1,5 @@
 # Session State
-<!-- Generated: 2026-07-26T15:47:56.409Z -->
+<!-- Generated: 2026-07-26T16:25:04.973Z -->
 <!-- Branch: unknown -->
 <!-- Plan: none -->
 
@@ -150,24 +150,28 @@
 ## Agent Result: journal-writer (16:04:00)
 - Run xác nhận N=100 **headless** (120s workload) đang chạy nền — máy vẫn dùng được, dự kiến ~5-8 phút. Run này sẽ trả lời: leak goroutine + orphan l...
 
+
+## Agent Result: git-manager (16:06:34)
+- Run xác nhận N=100 **headless** (120s workload) đang chạy nền — máy vẫn dùng được, dự kiến ~5-8 phút. Run này sẽ trả lời: leak goroutine + orphan l...
+
 ## Key Files Modified
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/reports/leak-race-consolidated-findings-and-fix-proposals.md
+- session-state/archive/20260721-2226.md
+- session-state/archive/20260721-2229.md
+- session-state/latest.md
 - .claudekit.lock
-- integration_stress_move_test.go
 - plans/260721-1950-firefoxkit-load-hardening/phase-01-f1-send-default-timeout.md
 - plans/260721-1950-firefoxkit-load-hardening/phase-02-f2-write-teardown-guard.md
 - plans/260721-1950-firefoxkit-load-hardening/phase-03-l1-non-blocking-context-prune.md
 - plans/260721-1950-firefoxkit-load-hardening/plan.md
-- session-state/archive/20260721-2213.md
-- session-state/archive/20260721-2217.md
-- session-state/latest.md
-- session-state/archive/20260719-1625.md
-- session-state/archive/20260719-1626.md
-- session-state/archive/20260719-1800.md
-- session-state/archive/20260719-1938.md
-- session-state/archive/20260720-0630.md
-- session-state/archive/20260721-2219.md
-- session-state/archive/20260721-2226.md
-- session-state/archive/20260721-2229.md
-- README.md
-- input/cursor_engine.go
-- input/cursor_path.go
+- session-state/archive/20260726-2042.md
+- session-state/archive/20260726-2202.md
+- session-state/archive/20260726-2247.md
+- docs/journals/journal-260726-2301-goroutine-orphan-leak-audit.md
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/.cook-state.json
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-01-static-audit-4-zones-parallel.md
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-02-fleet-workload-stress-harness.md
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-03-run-100-headed-fleet-on-this-machine.md
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/phase-04-consolidated-findings-report.md
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/plan.md
+- plans/260726-2019-firefoxkit-leak-race-audit-100-fleet-stress/reports/audit-z1-bidi-core.md
