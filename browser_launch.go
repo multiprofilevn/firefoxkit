@@ -77,8 +77,17 @@ func Launch(firefoxPath string, opts ...Option) (*Browser, error) {
 		return nil, fmt.Errorf("%w: firefox spawn: %v", ErrInvalidConfig, err)
 	}
 
+	// Bind the process to a kill-the-whole-tree mechanism immediately: Firefox
+	// starts forking content processes within milliseconds, and any of them
+	// spawned before this point would survive a kill aimed at the parent.
+	procTree := newProcessTreeReaper(cmd.Process.Pid)
+	if cfg.logger != nil {
+		cfg.logger.Debugf("firefoxkit: pid=%d process-tree reap via %s", cmd.Process.Pid, procTree.mode())
+	}
+
 	// On any failure past this point we kill the process AND clean profile.
 	cleanup := func() {
+		_ = procTree.reap()
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 		cleanupProfile()
@@ -97,6 +106,7 @@ func Launch(firefoxPath string, opts ...Option) (*Browser, error) {
 		HTTPClient:         http.DefaultClient,
 		Logger:             toBiDiLogger(cfg.logger),
 		DefaultCallTimeout: cfg.commandTimeout,
+		WriteTimeout:       cfg.writeTimeout,
 	})
 	if err != nil {
 		cleanup()
@@ -127,13 +137,19 @@ func Launch(firefoxPath string, opts ...Option) (*Browser, error) {
 		wsURL:          wsURL,
 		sessionID:      sess.SessionID,
 		cleanupProfile: cleanupProfile,
+		procTree:       procTree,
+		procDone:       make(chan struct{}),
 	}
 	b.initBaseCtx()
 
-	// Reap the child if Firefox exits on its own (crash, user quit) so the
-	// process entry doesn't linger until Close(). Close's redundant Wait on an
-	// already-reaped process returns an error that is ignored.
-	go func() { _ = cmd.Wait() }()
+	// Sole owner of cmd.Wait: reaps the child when Firefox exits on its own
+	// (crash, user quit) so the process entry doesn't linger until Close, and
+	// closes procDone — the only trustworthy "the process is gone" signal
+	// Close has after it kills the tree.
+	go func() {
+		defer close(b.procDone)
+		_ = cmd.Wait()
+	}()
 
 	if err := b.populateInitialPage(ctx); err != nil {
 		_ = b.Close() // Close kills the process and removes the temp profile.

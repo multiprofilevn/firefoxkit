@@ -2,9 +2,11 @@ package firefoxkit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tuwibu/firefoxkit/internal/bidi"
@@ -17,6 +19,12 @@ import (
 // client is torn down to error the stuck write out.
 const gracefulCloseBudget = 2 * time.Second
 
+// procExitTimeout bounds how long Close waits for the OS to actually reap the
+// Firefox process after the kill. Kill() returning nil only means the request
+// was accepted — the Wait owner closing procDone is the only proof the tree is
+// gone. A var (not a const) so tests can shrink the wait.
+var procExitTimeout = 5 * time.Second
+
 // Browser owns a Firefox process (Launch) or attaches to one (Connect) and
 // manages the pages opened on it.
 type Browser struct {
@@ -28,6 +36,13 @@ type Browser struct {
 	closeProc bool        // true only for Launch
 	wsURL     string      // ws://127.0.0.1:N/session/<sid>
 	sessionID string
+
+	// procTree kills the Firefox process together with its content/GPU
+	// children. Nil for Connect (nothing to reap).
+	procTree *processTreeReaper
+	// procDone is closed by the single cmd.Wait owner started in Launch when
+	// the Firefox process has actually exited. Nil for Connect.
+	procDone chan struct{}
 
 	// cleanupProfile removes the firefoxkit-created temp profile dir. Nil (or
 	// no-op) for Connect and user-supplied profiles. Invoked by Close() after
@@ -56,6 +71,10 @@ type Browser struct {
 	cleanupCh   chan *Page
 	cleanupStop chan struct{}
 	cleanupWG   sync.WaitGroup
+	// cleanupDropped counts cleanups abandoned because the drainer queue was
+	// full. Reported once by Close: a non-zero count means churn outran the
+	// drainer, which costs best-effort RPCs but never page tracking.
+	cleanupDropped atomic.Uint64
 
 	closeOnce sync.Once
 }
@@ -132,30 +151,69 @@ func (b *Browser) Done() <-chan struct{} {
 
 // Close shuts down. For Launch (owns the process) it kills Firefox.
 // For Connect it disconnects but leaves Firefox running.
+//
+// Bounded but not instant. Against a healthy peer it finishes in milliseconds
+// plus the process exit; against a dead or hung one the worst case is one
+// gracefulCloseBudget for the browser.close RPC, another for the cleanup sweep
+// and drainer join, plus procExitTimeout waiting for the process tree to
+// actually go — roughly 9-11s with the current budgets.
 func (b *Browser) Close() error {
 	var firstErr error
 	b.closeOnce.Do(func() {
-		// Cancel the base context first so any in-flight user operation
-		// derived from it unblocks before we tear down the transport.
+		// Graceful quit first, Launch path only: browser.close lets Firefox
+		// flush its profile and tear down its own content processes, leaving
+		// the kill below as a backstop. Best-effort — the RPC runs on a
+		// goroutine because a frame write does not honor the caller ctx
+		// (writeJSON has its own), so a hung peer would otherwise hold Close
+		// for the full write timeout. On Connect the browser belongs to the
+		// caller and must survive, so nothing is sent.
+		var gracefulQuit chan struct{}
+		if b.closeProc && b.client != nil {
+			gracefulQuit = make(chan struct{})
+			go func() {
+				defer close(gracefulQuit)
+				qctx, qcancel := context.WithTimeout(context.Background(), gracefulCloseBudget)
+				defer qcancel()
+				_ = b.client.CloseBrowser(qctx)
+			}()
+			select {
+			case <-gracefulQuit:
+			case <-time.After(gracefulCloseBudget):
+			}
+		}
+		// Signal the cleanup drainer BEFORE cancelling the base context, so
+		// the stop signal is already visible when workers next reach their
+		// select — otherwise which of stop / more work they pick depends on
+		// cancel timing. Do NOT block on the join here: baseCancel cannot
+		// unblock a worker wedged inside conn.Write (writeJSON runs under its
+		// own internal ctx); only the write timeout or the client teardown
+		// below frees it, so an unconditional Wait would stall Close for up to
+		// the full writeTimeout on a dead peer.
+		b.signalCleanupDrainer()
+		// Cancel the base context so any in-flight user operation derived from
+		// it unblocks before we tear down the transport.
 		if b.baseCancel != nil {
 			b.baseCancel()
 		}
-		// Signal the cleanup drainer to stop taking new work — but do NOT
-		// block on the join here. baseCancel cannot unblock a worker wedged
-		// inside conn.Write (writeJSON runs under its own internal ctx); only
-		// the write timeout or the client teardown below frees it, so an
-		// unconditional Wait would stall Close for up to the full writeTimeout
-		// on a dead peer.
-		b.signalCleanupDrainer()
 		b.pagesMu.Lock()
 		pages := b.pages
 		b.pages = nil
 		b.current = nil
 		b.pagesMu.Unlock()
-		// Graceful phase, bounded: per-page cleanup sweep + drainer join.
-		// Runs BEFORE the BiDi client tears down so RemoveIntercept /
-		// Unsubscribe RPCs still succeed on a healthy peer (finishes in ms).
-		// On a dead/hung peer the budget expires and we proceed — client.Close
+		// Graceful phase, bounded: per-page cleanup sweep + drainer join. It
+		// runs BEFORE the BiDi client tears down, so its RemoveIntercept /
+		// Unsubscribe RPCs still have a socket to travel on.
+		//
+		// Full order on the Launch path: browser.close → drainer signal →
+		// baseCancel → this sweep → client.Close → process reap. Sending
+		// browser.close first is deliberate — only Firefox can flush the profile
+		// and tear down its own content processes, and it needs a live session
+		// to do it — but it costs two things: an in-flight user operation is not
+		// cancelled until that RPC settles (≤ gracefulCloseBudget), and the
+		// sweep here then talks to a peer that is already quitting, so its RPCs
+		// often fail. They are best-effort and only logged. On the Connect path
+		// no close is sent, so the sweep runs against a live browser and
+		// succeeds in ms. Either way the budget caps the wait and client.Close
 		// below errors any stuck write out, making the final join fast.
 		graceful := make(chan struct{})
 		go func() {
@@ -173,7 +231,9 @@ func (b *Browser) Close() error {
 		}
 
 		if b.client != nil {
-			if err := b.client.Close(); err != nil {
+			// After a graceful browser.close the peer drops the socket on its
+			// own, so a teardown error there says nothing about our shutdown.
+			if err := b.client.Close(); err != nil && firstErr == nil && gracefulQuit == nil {
 				firstErr = err
 			}
 		}
@@ -182,17 +242,57 @@ func (b *Browser) Close() error {
 		// workers and the sweep goroutine exit promptly.
 		b.cleanupWG.Wait()
 		<-graceful
+		if gracefulQuit != nil {
+			<-gracefulQuit
+		}
+		// Surface lifetime churn that outran the drainer: page tracking stayed
+		// correct, but these pages never got their best-effort cleanup RPCs.
+		if n := b.cleanupDropped.Load(); n > 0 && b.log != nil {
+			b.log.Warnf("firefoxkit: %d page cleanups dropped over this browser's lifetime (cleanup drainer saturated)", n)
+		}
 		if b.closeProc && b.proc != nil {
-			if err := b.proc.Kill(); err != nil && firstErr == nil {
-				firstErr = fmt.Errorf("kill firefox pid=%d: %w", b.proc.Pid, err)
+			if err := b.reapProcess(); err != nil && firstErr == nil {
+				firstErr = err
 			}
-			_, _ = b.proc.Wait()
 		}
 		if b.cleanupProfile != nil {
 			b.cleanupProfile()
 		}
 	})
 	return firstErr
+}
+
+// reapProcess terminates the Firefox process tree and blocks until the process
+// has actually exited. Two invariants live here: the kill must take the content
+// processes with it (they otherwise keep the profile locked and park the pipe
+// readers), and success is defined by the exit being observed — a kill that
+// reports nil while Firefox keeps running is a real failure the caller must see.
+func (b *Browser) reapProcess() error {
+	if b.procDone == nil {
+		// Constructed outside Launch: no Wait owner to observe, so a plain
+		// kill is all there is.
+		return b.proc.Kill()
+	}
+	select {
+	case <-b.procDone:
+		return nil // already exited: graceful quit, crash or user close
+	default:
+	}
+	killErr := b.procTree.reap()
+	// Backstop for the parent in case the tree sweep missed it. An already
+	// exited process is the desired outcome, not a failure.
+	if err := b.proc.Kill(); err != nil && killErr == nil && !errors.Is(err, os.ErrProcessDone) {
+		killErr = fmt.Errorf("kill firefox pid=%d: %w", b.proc.Pid, err)
+	}
+	select {
+	case <-b.procDone:
+		return nil // gone — how the kill was reported no longer matters
+	case <-time.After(procExitTimeout):
+		if killErr != nil {
+			return fmt.Errorf("firefoxkit: firefox pid=%d survived kill: %w", b.proc.Pid, killErr)
+		}
+		return fmt.Errorf("firefoxkit: firefox pid=%d survived kill", b.proc.Pid)
+	}
 }
 
 // bidiClient is an internal accessor for other files in the package.
