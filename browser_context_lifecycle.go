@@ -64,12 +64,20 @@ func (b *Browser) removeDestroyedPage(id string) {
 	select {
 	case b.cleanupCh <- target:
 	default:
-		// Drainer saturated (extreme churn): run cleanup inline on the
-		// subscription worker so it is never lost. The page is already
-		// detached, so b.pages cannot leak even on this slow path.
-		cctx, cancel := context.WithTimeout(b.ctx(), cleanupTimeout)
-		target.cleanup(cctx)
-		cancel()
+		// Drainer saturated (extreme churn): drop the RPC half of cleanup.
+		// Running it here would block the subscription worker for a full
+		// cleanupTimeout per event, overflowing the 256-cap event queue — and a
+		// contextDestroyed lost there leaks b.pages permanently, which is
+		// strictly worse. Server-side state dies with the context anyway, so
+		// those RPCs are only belt-and-suspenders. The local half still runs:
+		// it needs no RPC (microseconds) and its handler registrations would
+		// otherwise sit in the client dispatcher, pinning this page, for the
+		// rest of the browser's life.
+		target.cleanupLocal()
+		n := b.cleanupDropped.Add(1)
+		if b.log != nil {
+			b.log.Warnf("firefoxkit: cleanup drainer saturated — dropped cleanup for context %s (%d dropped so far)", id, n)
+		}
 	}
 }
 
@@ -121,8 +129,11 @@ func (b *Browser) startCleanupDrainer() {
 					return
 				case p := <-b.cleanupCh:
 					// The context is already gone server-side; cleanup RPCs
-					// targeting it fail harmlessly.
-					cctx, cancel := context.WithTimeout(b.ctx(), cleanupTimeout)
+					// targeting it fail harmlessly. Derived from Background,
+					// like the drain path below: a page picked up while Close
+					// is cancelling the base ctx must still get its shot at a
+					// healthy peer instead of failing on a ctx race.
+					cctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 					p.cleanup(cctx)
 					cancel()
 				}
