@@ -1,0 +1,17 @@
+=== RUN   TestStress_FleetWorkload
+    integration_stress_fleet_workload_test.go:234: fleet workload: N=100 headless=false duration=2m0s
+    integration_stress_fleet_workload_test.go:257: post-launch: goroutines=803 heapAllocMB=8 fleetParentRSSMB=609 allFirefoxRSSMB=76323 freePhysMB=78906
+    integration_stress_fleet_workload_test.go:280: sample t=21s goroutines=1004 heapAllocMB=11 sysMB=68 allFirefoxRSSMB=84224 freePhysMB=70788
+    integration_stress_fleet_workload_test.go:170: browser 33 iter step navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:170: browser 13 iter step navigate: firefoxkit: timeout
+    integration_stress_fleet_workload_test.go:280: sample t=1m14s goroutines=1004 heapAllocMB=12 sysMB=74 allFirefoxRSSMB=87279 freePhysMB=67579
+    integration_stress_fleet_workload_test.go:280: sample t=2m8s goroutines=907 heapAllocMB=25 sysMB=90 allFirefoxRSSMB=88430 freePhysMB=66759
+    integration_stress_fleet_workload_test.go:280: sample t=2m15s goroutines=906 heapAllocMB=26 sysMB=90 allFirefoxRSSMB=88179 freePhysMB=66932
+    integration_stress_fleet_workload_test.go:248: close browser 48: firefoxkit: firefox pid=53524 survived kill: kill firefox pid=53524: TerminateProcess: Access is denied.
+    integration_stress_fleet_workload_test.go:248: close browser 76: firefoxkit: firefox pid=95464 survived kill: kill firefox pid=95464: TerminateProcess: Access is denied.
+    integration_stress_fleet_workload_test.go:315: SUMMARY: iters=956 errors=2 goroutines before=3 after=3 heapAllocMB post-launch=8 post-close=5
+    integration_stress_fleet_workload_test.go:320: workload finished with 2 errors (see log)
+--- FAIL: TestStress_FleetWorkload (1042.45s)
+FAIL
+exit status 1
+FAIL	github.com/tuwibu/firefoxkit	1044.272s

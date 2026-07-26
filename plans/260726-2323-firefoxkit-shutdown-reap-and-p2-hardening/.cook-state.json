@@ -1,0 +1,16 @@
+{
+  "totalPhases": 6,
+  "completedPhases": 6,
+  "status": "complete",
+  "currentPhase": null,
+  "completedPhaseNames": [
+    "phase-01-process-tree-reap-and-verify-dead-in-close",
+    "phase-02-cleanup-drainer-drop-on-saturation",
+    "phase-03-setextraheaders-install-remove-race-fix",
+    "phase-04-write-timeout-knob",
+    "phase-05-native-gesture-lock-and-scale-factor-pref",
+    "phase-06-verify-fleet-100-headed-clean"
+  ],
+  "epicDir": null,
+  "lastUpdated": "2026-07-26T19:49:43.952Z"
+}
