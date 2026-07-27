@@ -1,5 +1,5 @@
 # Session State
-<!-- Generated: 2026-07-26T19:36:26.181Z -->
+<!-- Generated: 2026-07-26T19:55:54.536Z -->
 <!-- Branch: unknown -->
 <!-- Plan: none -->
 
@@ -9,10 +9,11 @@
 - Fix plan: Phase 3 SetExtraHeaders race fix
 - Fix plan: Phase 4 write timeout knob
 - Fix plan: Phase 5 native gesture lock + scale-factor pref
+- Review fixes F1-F3 (drop-path local cleanup + comments + README)
+- Fix plan: Phase 6 verify headed×100 clean — D-1/D-2 confirmed dead, user accepted
 
 ## What's Left
-- [ ] Review fixes F1-F3 (drop-path local cleanup + comments + README)
-- [ ] Fix plan: Phase 6 verify headed×100 clean
+- (All tasks completed)
 
 ## Agent Result: developer (22:12:05)
 - "Tiếp tục hết" — rõ. Để giữ chất lượng qua 9 phase còn lại mà không cạn context, tôi delegate từng phase cho `developer` agent với spec chính xác (...
@@ -201,24 +202,32 @@
 ## Agent Result: git-manager (19:53:39)
 - Vẫn đang chạy — đã xong phần workload (2m), giờ đang ở **giai đoạn đóng 100 browser** (553 process firefox còn sống là fleet + con của nó đang chờ ...
 
+
+## Agent Result: git-manager (19:54:59)
+- # Xong — plan fix 6/6 phase hoàn tất, verify headed×100 xác nhận 2 bệnh P1 đã chết ## Kết quả cuối cùng (so với trước fix, cùng kịch bản headed×100...
+
+
+## Agent Result: journal-writer (19:55:27)
+- Đã xác nhận: commit bổ sung `103a9aa` đã lên — toàn bộ thư mục plan fix (plan + 6 phase + 8 report/bằng chứng, kể cả log verify) giờ nằm trong git,...
+
 ## Key Files Modified
-- README.md
-- browser.go
-- browser_connect.go
-- browser_context_lifecycle.go
-- browser_context_lifecycle_load_test.go
-- browser_launch.go
-- concurrency_hardening_test.go
-- input/backend_native_windows.go
-- input/cursor_engine.go
-- input/touch.go
-- integration_stress_fleet_workload_test.go
-- internal/bidi/client.go
-- internal/bidi/transport.go
-- options.go
-- options_prefs_test.go
-- page.go
-- page_headers.go
-- page_mouse_api.go
-- session-state/archive/20260726-2202.md
-- session-state/archive/20260726-2247.md
+- session-state/archive/20260726-2325.md
+- session-state/archive/20260727-0121.md
+- session-state/latest.md
+- docs/journals/journal-260727-0115-graceful-browser-shutdown-jobobject-escape-hatch.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/.cook-state.json
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/phase-01-process-tree-reap-and-verify-dead-in-close.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/phase-02-cleanup-drainer-drop-on-saturation.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/phase-03-setextraheaders-install-remove-race-fix.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/phase-04-write-timeout-knob.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/phase-05-native-gesture-lock-and-scale-factor-pref.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/phase-06-verify-fleet-100-headed-clean.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/plan.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/code-review-phases-1-5.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/developer-phase-01-report.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/developer-phase-02-report.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/developer-phase-03-report.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/developer-phase-04-report.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/developer-phase-05-report.md
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/fleet-100-headed-postfix-verify.log
+- plans/260726-2323-firefoxkit-shutdown-reap-and-p2-hardening/reports/postfix-verify-summary.md
