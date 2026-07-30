@@ -5,11 +5,7 @@ package firefoxkit
 import (
 	"context"
 	"fmt"
-	"sync"
 	"syscall"
-	"unsafe"
-
-	"github.com/tuwibu/firefoxkit/input"
 )
 
 var (
@@ -32,89 +28,6 @@ const (
 	swpNoActivate = 0x0010
 )
 
-// Per-process state for findFirefoxHWND. The callback is allocated EXACTLY
-// ONCE via syscall.NewCallback (Go's callback table is a fixed-size slab
-// that does NOT get garbage-collected — allocating per call exhausts it
-// after ~1024 lookups). Thread the pid/match through package vars under
-// findHwndMu so the single callback closure has nothing to capture.
-var (
-	findHwndOnce sync.Once
-	findHwndCB   uintptr
-	findHwndMu   sync.Mutex
-	findHwndPID  uint32
-	findHwndOut  uintptr
-)
-
-func findHwndCallback(hwnd, _ uintptr) uintptr {
-	var winPID uint32
-	_, _, _ = procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&winPID)))
-	if winPID != findHwndPID {
-		return 1
-	}
-	if ret, _, _ := procIsWindowVisible.Call(hwnd); ret == 0 {
-		return 1
-	}
-	var buf [256]uint16
-	n, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-	if n == 0 {
-		return 1
-	}
-	if syscall.UTF16ToString(buf[:n]) == input.MozillaWindowClass {
-		findHwndOut = hwnd
-		return 0 // stop enumeration
-	}
-	return 1
-}
-
-// HWND returns the top-level Mozilla window owned by this Browser's process.
-// A non-zero override set via SetHWND wins. Otherwise, when proc is nil
-// (Connect path) this returns an error.
-func (b *Browser) HWND() (uintptr, error) {
-	if b == nil {
-		return 0, fmt.Errorf("firefoxkit: nil browser")
-	}
-	if b.hwndOverride != 0 {
-		return b.hwndOverride, nil
-	}
-	if b.proc == nil {
-		return 0, fmt.Errorf("firefoxkit: HWND unavailable on Connect path")
-	}
-	return findFirefoxHWND(uint32(b.proc.Pid))
-}
-
-// findFirefoxHWND enumerates visible top-level windows, matches by PID +
-// MozillaWindowClass, returns the first hit. 0 if not found.
-//
-// IMPORTANT: callback is allocated once via sync.Once. Calls are serialized
-// through findHwndMu so pid/match state thread through package vars instead
-// of a closure capture (closure capture would force a fresh NewCallback per
-// invocation, exhausting Go's fixed callback table).
-func findFirefoxHWND(pid uint32) (uintptr, error) {
-	findHwndOnce.Do(func() {
-		findHwndCB = syscall.NewCallback(findHwndCallback)
-	})
-	findHwndMu.Lock()
-	defer findHwndMu.Unlock()
-	findHwndPID = pid
-	findHwndOut = 0
-	_, _, _ = procEnumWindows.Call(findHwndCB, 0)
-	return findHwndOut, nil
-}
-
-// FindHWND returns the top-level Mozilla window owned by pid. For callers on the
-// Connect path (Browser.proc is nil, so HWND() cannot self-resolve) that learned
-// the real browser PID out-of-band and need to wire it via SetHWND before native
-// input. Returns an error if no matching window is found.
-func FindHWND(pid int) (uintptr, error) {
-	hwnd, err := findFirefoxHWND(uint32(pid))
-	if err != nil {
-		return 0, err
-	}
-	if hwnd == 0 {
-		return 0, fmt.Errorf("firefoxkit: no Firefox window found for pid %d", pid)
-	}
-	return hwnd, nil
-}
 
 // Focus brings the Firefox window to the foreground. Restores from minimized
 // state if needed. Required before native input can hit content. The ctx
