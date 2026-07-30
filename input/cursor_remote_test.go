@@ -122,3 +122,6 @@ func TestMoveTo_OffTargetRemotePath_FallsBackToLocal(t *testing.T) {
 		t.Fatalf("fallback last point must be exact target, got (%v,%v)", last.X, last.Y)
 	}
 }
+
+// SetWindow is unused by this fake — the frame lives in the real native backend.
+func (*recordingBackend) SetWindow(Window) {}

@@ -173,3 +173,6 @@ func TestMoveTo_NonBatchingBackend_PerPointFallback(t *testing.T) {
 		t.Fatal("expected per-point MouseMove calls on non-batching backend")
 	}
 }
+
+// SetWindow is unused by this fake — the frame lives in the real native backend.
+func (*countBackend) SetWindow(Window) {}

@@ -50,7 +50,18 @@ type config struct {
 	launchTimeout  time.Duration
 	commandTimeout time.Duration
 	writeTimeout   time.Duration
+
+	foregroundGuard bool
+	// contentOffsetTolerance bounds measurements taken inside the page realm.
+	// See WithContentOffsetTolerance.
+	contentOffsetTolerance int
 }
+
+// DefaultContentOffsetTolerance is the slack, in screen pixels, allowed on a
+// content-origin measurement taken inside the page realm. Borders and DPI
+// rounding account for a couple of pixels; anything larger is a measurement
+// that cannot be trusted.
+const DefaultContentOffsetTolerance = 4
 
 func defaultConfig() *config {
 	return &config{
@@ -62,6 +73,11 @@ func defaultConfig() *config {
 		flags:         map[string]string{},
 		prefs:         map[string]any{},
 		launchTimeout: 30 * time.Second,
+		// On by default: typing into the wrong window is destructive, and the
+		// check costs one syscall per five characters.
+		foregroundGuard: true,
+
+		contentOffsetTolerance: DefaultContentOffsetTolerance,
 		// Backstop for BiDi calls whose ctx carries no deadline — wide enough
 		// for the slowest legitimate RPC (screenshot/nav ~ seconds).
 		commandTimeout: 60 * time.Second,
@@ -97,6 +113,19 @@ func WithInputBackend(t BackendType) Option {
 	return func(c *config) { c.inputBackend = t }
 }
 
+// WithForegroundGuard toggles the native backend's foreground check. When on
+// (the default), every keystroke chunk and mouse button event confirms the
+// Firefox window still owns the OS foreground and fails with ErrForegroundLost
+// if it does not — SendInput has no window address, so input from an
+// unfocused browser silently types into whatever took focus.
+//
+// No-op for the BiDi backend, which addresses the window directly and does not
+// need focus at all. Turn it off only when something else already holds a
+// foreground lease for the whole critical section.
+func WithForegroundGuard(on bool) Option {
+	return func(c *config) { c.foregroundGuard = on }
+}
+
 // WithMousePathURL sets the full URL of a mouse-positions endpoint that returns
 // a high-entropy {x,y,delay} cursor path. When set, ProfileHuman moves fetch
 // from it and replay; empty (default) keeps the pure local bezier engine.
@@ -104,12 +133,41 @@ func WithMousePathURL(url string) Option {
 	return func(c *config) { c.mousePathURL = url }
 }
 
+// WithNativeWindow is a MANUAL OVERRIDE for the coordinate frame, used only
+// when the live window cannot be measured — no HWND resolves (the Connect path
+// before SetHWND), or the Win32 client origin is unavailable.
+//
+// The normal path does not need it: the kit measures the content origin and the
+// DPI scale from the live window on every frame pin, and those measurements win
+// over anything set here. Set it when a browser is driven natively on a host
+// where the HWND lookup cannot succeed and the window position is known up
+// front instead.
 func WithNativeWindow(x, y int, scale float64) Option {
 	return func(c *config) {
 		if scale <= 0 {
 			scale = 1.0
 		}
 		c.nativeWindow = nativeWindow{X: x, Y: y, Scale: scale}
+	}
+}
+
+// WithContentOffsetTolerance sets the slack, in screen pixels, allowed on a
+// measurement taken inside the page realm before it is discarded in favour of a
+// trusted default.
+//
+// Firefox's content origin is based on GetClientRect + ClientToScreen, which no
+// page can influence; only the chrome-area height on top of it is measured in
+// the page, and this is the tolerance applied to it. chromekit — forced to
+// measure the whole origin in the page, because Chrome paints its chrome inside
+// the Win32 client area — applies the same option to the whole origin.
+//
+// px <= 0 is ignored. Default 4.
+func WithContentOffsetTolerance(px int) Option {
+	return func(c *config) {
+		if px <= 0 {
+			return
+		}
+		c.contentOffsetTolerance = px
 	}
 }
 

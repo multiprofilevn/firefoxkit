@@ -273,3 +273,9 @@ func TestReleaseCtx_PassesLiveCtxThrough(t *testing.T) {
 		t.Fatal("fallback release ctx must be bounded")
 	}
 }
+
+// SetWindow is unused by this fake — the frame lives in the real native backend.
+func (*gestureFake) SetWindow(Window) {}
+
+// SetWindow is unused by this fake — the frame lives in the real native backend.
+func (*cancelOnDownBackend) SetWindow(Window) {}

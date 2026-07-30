@@ -24,7 +24,12 @@ func (p *Page) inputBackend() input.Backend {
 		if p.bkCache.bk == nil { // may be pre-set by tests (fake backend injection)
 			switch p.browser.cfg.inputBackend {
 			case BackendNative:
-				p.bkCache.bk = input.NewNative(input.Config{Window: p.nativeWindow()})
+				// The guard only means anything for the native backend — BiDi
+				// addresses the window directly and never needs the foreground.
+				p.bkCache.bk = input.NewNative(input.Config{
+					Window:          p.nativeWindow(),
+					ForegroundGuard: p.browser.foregroundGuard(),
+				})
 			default:
 				p.bkCache.bk = input.NewBiDi(p.browser.client, p.contextID)
 			}
@@ -67,6 +72,25 @@ func buildNativeWindow(manual nativeWindow, ox, oy int, scale float64, measured 
 		s = 1.0
 	}
 	return input.Window{X: manual.X, Y: manual.Y, Scale: s}
+}
+
+// setInputWindow pushes a re-measured frame into this page's live backend.
+//
+// No-op until the backend exists: forcing construction here would build one for
+// a page that never takes native input, and would do it from whatever the window
+// happens to be doing at invalidation time rather than at first use.
+//
+// The backend is mutated, never replaced. The Cursor and the KeyboardAPI each
+// captured the result of inputBackend() behind their own sync.Once, so a
+// rebuilt cache would reach neither of them — and swapping the object between a
+// MouseDown and its MouseUp leaves the OS holding the button down.
+func (p *Page) setInputWindow(w input.Window) {
+	if !p.bkCache.ready.Load() {
+		return
+	}
+	if bk := p.bkCache.bk; bk != nil {
+		bk.SetWindow(w)
+	}
 }
 
 // cursorEngine returns the human-like cursor layer over inputBackend(). Lazy.

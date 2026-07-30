@@ -78,3 +78,6 @@ func TestDrag_ReleasesButtonAfterCallerCtxCancelled(t *testing.T) {
 		t.Fatal("Drag released on the cancelled caller ctx — the release would be dropped")
 	}
 }
+
+// SetWindow is unused by this fake — the frame lives in the real native backend.
+func (*dragReleaseBackend) SetWindow(input.Window) {}

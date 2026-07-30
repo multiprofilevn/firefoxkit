@@ -183,3 +183,6 @@ func TestMoveAfterDrag_SeedsFromDragEnd(t *testing.T) {
 		t.Fatalf("MoveTo after drag too long (%d moves) — seeded from origin not drag end (400,400)", legMoves)
 	}
 }
+
+// SetWindow is unused by this fake — the frame lives in the real native backend.
+func (*fakeCursorBackend) SetWindow(input.Window) {}

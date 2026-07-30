@@ -52,3 +52,6 @@ func (f *fakeBackend) KeyCombo(_ context.Context, vk uint16, m Modifier) error {
 	f.log("KeyCombo(vk=0x%X,mods=%d)", vk, int(m))
 	return nil
 }
+
+// SetWindow is unused by this fake — the frame lives in the real native backend.
+func (*fakeBackend) SetWindow(Window) {}

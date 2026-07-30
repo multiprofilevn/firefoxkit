@@ -45,8 +45,7 @@ func TestIntegration_LaunchNavigateScreenshotClose(t *testing.T) {
 		t.Fatalf("WaitForReady: %v", err)
 	}
 
-	ctx := p.Ctx()
-	img, err := p.Screenshot(ctx)
+	img, err := p.Screenshot()
 	if err != nil {
 		t.Fatalf("Screenshot: %v", err)
 	}

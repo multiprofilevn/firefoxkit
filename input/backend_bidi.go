@@ -17,6 +17,11 @@ type BackendBiDi struct {
 	wheelID    string
 }
 
+// SetWindow is a no-op. BiDi dispatches into the browsing context by CSS
+// coordinate; it never touches the OS pointer, so it has no screen coordinate
+// frame to update.
+func (b *BackendBiDi) SetWindow(Window) {}
+
 // NewBiDi returns a BackendBiDi bound to the given browsing context.
 func NewBiDi(client *bidi.Client, contextID string) *BackendBiDi {
 	return &BackendBiDi{

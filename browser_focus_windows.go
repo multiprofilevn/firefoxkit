@@ -140,29 +140,6 @@ func (b *Browser) Focus(ctx context.Context) error {
 	return nil
 }
 
-// ContentOffset returns the (x, y) pixel offset from the Firefox window's
-// top-left to the top-left of the rendered web content — the chrome height
-// plus border. Used to translate page coordinates to screen coordinates for
-// native input.
-func (b *Browser) ContentOffset() (int, int, error) {
-	hwnd, err := b.HWND()
-	if err != nil {
-		return 0, 0, err
-	}
-	return input.MeasureContentOffset(hwnd)
-}
-
-// WindowScale returns the per-monitor DPI scale factor of the Firefox window
-// (1.0 at 96 DPI). Used by the native input backend to map CSS pixels to
-// physical screen pixels under display scaling.
-func (b *Browser) WindowScale() (float64, error) {
-	hwnd, err := b.HWND()
-	if err != nil {
-		return 0, err
-	}
-	return input.MeasureDPIScale(hwnd), nil
-}
-
 // SetWindowBounds positions and sizes the Firefox window in screen pixels.
 // Firefox has no --window-position CLI flag, so native-input callers running
 // multiple profiles use this to tile windows into a non-overlapping grid (a

@@ -34,6 +34,9 @@ var (
 	_ func(*Browser, context.Context) error  = (*Browser).Focus
 	_ func(*Browser) error                   = (*Browser).GoBack
 	_ func(*Browser) (int, int, error)       = (*Browser).ContentOffset
+	_ func(*Browser) (float64, error)        = (*Browser).WindowScale
+	_ func(*Browser) (input.Rect, error)     = (*Browser).WindowRect
+	_ func(*Browser) error                   = (*Browser).InvalidateNativeWindow
 	_ func(*Browser, uintptr)                = (*Browser).SetHWND
 	_ func(*Browser) uint32                  = (*Browser).PID
 	_ func(*Browser, string) error           = (*Browser).ClosePagesNotMatching
