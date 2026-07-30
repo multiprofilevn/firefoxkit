@@ -156,14 +156,3 @@ func (b *Browser) InvalidateNativeWindow() error {
 	}
 	return nil
 }
-
-// WindowScale returns the per-monitor DPI scale factor of the Firefox window
-// (1.0 at 96 DPI). Used by the native input backend to map CSS pixels to
-// physical screen pixels under display scaling.
-func (b *Browser) WindowScale() (float64, error) {
-	hwnd, err := b.HWND()
-	if err != nil {
-		return 0, err
-	}
-	return input.MeasureDPIScale(hwnd), nil
-}
