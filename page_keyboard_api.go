@@ -1,7 +1,7 @@
 package firefoxkit
 
 import (
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // Keyboard returns the per-page KeyboardAPI, cached so timing knobs persist.

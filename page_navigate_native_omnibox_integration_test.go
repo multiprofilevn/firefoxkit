@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tuwibu/firefoxkit"
+	"github.com/multiprofilevn/firefoxkit"
 )
 
 func TestNavigateReal_FirefoxNativeOmnibox(t *testing.T) {

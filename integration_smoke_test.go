@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tuwibu/firefoxkit"
+	"github.com/multiprofilevn/firefoxkit"
 )
 
 // firefoxBinary returns the path from FIREFOXKIT_FIREFOX_PATH or skips the

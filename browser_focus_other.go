@@ -5,7 +5,7 @@ package firefoxkit
 import (
 	"context"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // HWND is Windows-only. Stub returns 0.

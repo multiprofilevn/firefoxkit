@@ -1,6 +1,6 @@
 package firefoxkit
 
-import "github.com/tuwibu/firefoxkit/internal/bidi"
+import "github.com/multiprofilevn/firefoxkit/internal/bidi"
 
 // Logger is the diagnostic interface firefoxkit uses. Inject via WithLogger;
 // default is a no-op.

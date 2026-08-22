@@ -12,7 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // mockBiDi is an in-process WebDriver BiDi server for root-package tests.

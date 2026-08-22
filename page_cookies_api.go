@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // Cookie is the firefoxkit-facing cookie shape. Mirrors chromekit naming.

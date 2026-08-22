@@ -3,7 +3,7 @@ package firefoxkit
 import (
 	"fmt"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // InstallWebExtension installs an unpacked extension directory (or .xpi) as a

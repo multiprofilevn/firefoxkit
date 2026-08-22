@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"regexp"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // Frame represents an iframe inside a Page. Methods delegate to BiDi using

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // BackendBiDi dispatches input via BiDi input.performActions.

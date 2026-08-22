@@ -3,7 +3,7 @@
 package firefoxkit
 
 import (
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // chromeAreaCorrection is the seam over the measured chrome-area height (title

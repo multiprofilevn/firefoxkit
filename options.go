@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // BackendType selects how firefoxkit dispatches mouse/keyboard input.

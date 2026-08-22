@@ -3,7 +3,7 @@ package input
 import (
 	"context"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // PathPoint is one step of a cursor path: target coordinate + how long to

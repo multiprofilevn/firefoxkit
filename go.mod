@@ -1,4 +1,4 @@
-module github.com/tuwibu/firefoxkit
+module github.com/multiprofilevn/firefoxkit
 
 go 1.26.2
 

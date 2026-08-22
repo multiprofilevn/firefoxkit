@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // dragReleaseBackend records each mouse op together with whether the context it

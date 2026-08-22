@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // downloadsAPI is the per-Page download state — a single subscribed Wait

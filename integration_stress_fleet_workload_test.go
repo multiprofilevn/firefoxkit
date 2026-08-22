@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tuwibu/firefoxkit"
+	"github.com/multiprofilevn/firefoxkit"
 )
 
 // workloadNavTimeout bounds a single Navigate under heavy fleet load.

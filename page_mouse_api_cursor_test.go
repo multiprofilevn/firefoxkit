@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // fakeCursorBackend implements input.Backend and records mouse opcodes so we

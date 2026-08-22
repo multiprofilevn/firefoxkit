@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // Firefox does NOT paint its chrome inside the Win32 client area, so

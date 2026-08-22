@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // Navigate drives the page to url and waits for `complete` readiness.

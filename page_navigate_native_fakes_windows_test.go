@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // navKeyRecorder is a fake input.Backend that records every dispatched key

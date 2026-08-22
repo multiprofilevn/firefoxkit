@@ -11,7 +11,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // ---------------------------------------------------------------------------

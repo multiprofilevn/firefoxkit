@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tuwibu/firefoxkit/input"
-	"github.com/tuwibu/firefoxkit/internal/bidi"
+	"github.com/multiprofilevn/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/internal/bidi"
 )
 
 // Page is a top-level browsing context (≈ a tab).

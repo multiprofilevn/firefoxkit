@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tuwibu/firefoxkit"
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // fixedCoords are used across probes so layout/navigation noise does not

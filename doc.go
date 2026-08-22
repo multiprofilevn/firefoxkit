@@ -1,5 +1,5 @@
 // Package firefoxkit wraps Firefox automation via the W3C WebDriver BiDi
-// protocol with a Puppeteer-like API. Mirrors github.com/tuwibu/chromekit:
+// protocol with a Puppeteer-like API. Mirrors github.com/multiprofilevn/chromekit:
 //
 //	b, _ := firefoxkit.Launch(`C:\Program Files\Mozilla Firefox\firefox.exe`)
 //	defer b.Close()

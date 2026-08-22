@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // A Page caches its input backend behind THREE independent sync.Once values:

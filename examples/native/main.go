@@ -13,7 +13,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/tuwibu/firefoxkit"
+	"github.com/multiprofilevn/firefoxkit"
 )
 
 func main() {

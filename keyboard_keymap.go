@@ -1,6 +1,6 @@
 package firefoxkit
 
-import "github.com/tuwibu/firefoxkit/input"
+import "github.com/multiprofilevn/firefoxkit/input"
 
 // keyEntry maps a chromekit-compatible key name to the BiDi/W3C key value and
 // the VK code needed for KeyCombo (modifier path). Named keys without a rune

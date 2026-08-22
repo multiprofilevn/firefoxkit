@@ -3,7 +3,7 @@ package firefoxkit
 import (
 	"errors"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // ErrForegroundLost is raised when the browser window lost the OS foreground

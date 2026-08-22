@@ -5,7 +5,7 @@ package firefoxkit
 import (
 	"sync"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 var procGetForegroundWindow = user32.NewProc("GetForegroundWindow")

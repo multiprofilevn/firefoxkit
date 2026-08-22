@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tuwibu/firefoxkit"
+	"github.com/multiprofilevn/firefoxkit"
 )
 
 func stressFirefox(t *testing.T) string {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // The numbers in this file are not invented. They come from a real Firefox

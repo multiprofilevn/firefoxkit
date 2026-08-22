@@ -5,7 +5,7 @@ package firefoxkit
 import (
 	"math"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // windowScaleMetrics is what the page realm says about the ratio between its

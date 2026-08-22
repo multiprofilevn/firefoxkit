@@ -6,8 +6,8 @@ migration requires exactly three mechanical changes; the rest of your code compi
 ## Mechanical replacements
 
 ```diff
--import "github.com/tuwibu/chromekit"
-+import "github.com/tuwibu/firefoxkit"
+-import "github.com/multiprofilevn/chromekit"
++import "github.com/multiprofilevn/firefoxkit"
 
 -b, _ := chromekit.Connect(9222)
 +b, _ := firefoxkit.Connect(9333)          // Firefox default BiDi port

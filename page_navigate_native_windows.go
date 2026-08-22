@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tuwibu/firefoxkit/input"
+	"github.com/multiprofilevn/firefoxkit/input"
 )
 
 // navigateNative simulates a user typing url into Firefox's address bar:

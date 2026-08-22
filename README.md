@@ -1,11 +1,11 @@
 # firefoxkit
 
-Pure-Go Firefox automation library — counterpart of [chromekit](https://github.com/tuwibu/chromekit). Uses the W3C WebDriver BiDi protocol (Firefox 129+). No Node.js, no extra runtime.
+Pure-Go Firefox automation library — counterpart of [chromekit](https://github.com/multiprofilevn/chromekit). Uses the W3C WebDriver BiDi protocol (Firefox 129+). No Node.js, no extra runtime.
 
 ## Install
 
 ```bash
-go get github.com/tuwibu/firefoxkit
+go get github.com/multiprofilevn/firefoxkit
 ```
 
 Requires Firefox **129 or newer** (BiDi protocol — CDP support was removed in FF 129).
@@ -29,7 +29,7 @@ import (
     "os"
     "time"
 
-    "github.com/tuwibu/firefoxkit"
+    "github.com/multiprofilevn/firefoxkit"
 )
 
 func main() {
