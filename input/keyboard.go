@@ -3,6 +3,7 @@ package input
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -138,11 +139,11 @@ func NewKeyboard(b Backend) *Keyboard {
 
 // Type sends each rune via the backend with a random per-key delay.
 func (k *Keyboard) Type(ctx context.Context, text string) error {
-	for _, ch := range text {
+	for _, ch := range normalizeLineBreaks(text) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := k.backend.KeyChar(ctx, ch); err != nil {
+		if err := k.emitRune(ctx, ch); err != nil {
 			return err
 		}
 		k.sleep()
@@ -150,14 +151,45 @@ func (k *Keyboard) Type(ctx context.Context, text string) error {
 	return nil
 }
 
+// normalizeLineBreaks folds CRLF and a lone CR into LF, so one line break is
+// one rune — and therefore one Enter press — whatever convention the caller's
+// text arrived in. Text submitted from an HTML textarea carries CRLF.
+func normalizeLineBreaks(text string) string {
+	if !strings.ContainsRune(text, '\r') {
+		return text
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.ReplaceAll(text, "\r", "\n")
+}
+
+// emitRune dispatches one rune of typed text. A line break is not a printable
+// character, and routing it through KeyChar gets it wrong on both backends.
+//
+// The remote backend sends a line break as a printable key value, so an editor
+// that consumes Enter in its own keydown handler (Draft.js, and every rich
+// composer built on it) acts on the key AND still receives the character,
+// turning one break in the source text into two on the page. The native
+// backend injects U+000A as a Unicode scan code, which the browser drops on
+// the floor, losing the break entirely.
+//
+// Both backends agree on VK_RETURN, so a line break goes out as the key a
+// human would actually press.
+func (k *Keyboard) emitRune(ctx context.Context, ch rune) error {
+	if ch == '\n' || ch == '\r' {
+		return k.backend.KeyCombo(ctx, VKReturn, 0)
+	}
+	return k.backend.KeyChar(ctx, ch)
+}
+
 // TypeFast asks the backend to bulk-insert.
 func (k *Keyboard) TypeFast(ctx context.Context, text string) error {
 	return k.backend.InsertText(ctx, text)
 }
 
-// Press sends a single rune.
+// Press sends a single rune. A line break goes out as an Enter press — see
+// emitRune.
 func (k *Keyboard) Press(ctx context.Context, ch rune) error {
-	return k.backend.KeyChar(ctx, ch)
+	return k.emitRune(ctx, ch)
 }
 
 // Combo presses VK with modifiers held.
